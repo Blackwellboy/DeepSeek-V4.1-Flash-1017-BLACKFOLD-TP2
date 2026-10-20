@@ -2,7 +2,9 @@
 
 # BLACKFOLD: DeepSeek-V4.1-Flash-1017 TP2 recipe
 
-**Uncensored DeepSeek-V4.1-Flash-1017 (763B MoE) on two DGX Sparks, at stock speed and stock quality.**
+**Uncensored, and still faster than the stock builds.** DeepSeek-V4.1-Flash-1017 (763B MoE) on two DGX Sparks:
+**+52% faster 128K prefill** and **+6.6% faster code** than lucataco's stock TP2, level or ahead of tonyd2wild's
+at 1 to 4 streams, JailbreakBench refusals cut from 94 to 6, and no measurable quality loss against DeepSeek's own API.
 
 This is the TP2 recipe: how to run BLACKFOLD on two GB10 nodes with TensorFold's native engine, the three engine
 patches that make it fast, the two-rail network setup, and every measurement. The weights live on Hugging Face:
