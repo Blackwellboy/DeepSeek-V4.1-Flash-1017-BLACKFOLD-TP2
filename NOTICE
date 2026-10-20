@@ -1,0 +1,14 @@
+BLACKFOLD
+Copyright 2026 Blackwellboy
+
+This repository's scripts, documents and patch files are licensed under the Apache License,
+Version 2.0 (LICENSE).
+
+The files in patches/ are modifications of TensorFold (https://github.com/ashhart/TensorFold),
+as forked by bertholomus (https://github.com/bertholomus/TensorFold), at revision
+629c524a0ea57512a5342abb498d1b7c25353343. TensorFold is licensed under the Apache License,
+Version 2.0; its LICENSE and NOTICE are reproduced in patches/TensorFold-LICENSE and
+patches/TensorFold-NOTICE. Each patch states the files it changes and why (Apache License 2.0,
+section 4(b)).
+
+Model weights are not distributed here. See CREDITS.md for every project this build relies on.

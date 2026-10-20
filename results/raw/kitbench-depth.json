@@ -1,0 +1,15 @@
+{
+ "cmd": "depth",
+ "base": "http://127.0.0.1:18191",
+ "model": "DeepSeek-v4.1-Flash-1017-heretic-tf",
+ "unix": 1792475060.2711983,
+ "result": [
+  {
+   "length": 131072,
+   "prompt_tokens": 131072,
+   "ttft_s": 65.69895506603643,
+   "tokens": 256,
+   "decode_tps": 35.42263959781952
+  }
+ ]
+}

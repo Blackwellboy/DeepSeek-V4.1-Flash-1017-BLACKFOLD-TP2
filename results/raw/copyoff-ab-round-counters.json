@@ -1,0 +1,790 @@
+{
+ "trial": "copy-off A/B solo request counters",
+ "arms": {
+  "A1": [
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 0,
+    "tokens": 1286,
+    "decode_tps": 91.93773578137711,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 46.90218331204765,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 0,
+    "tokens": 1027,
+    "decode_tps": 59.628154018828326,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 34.97283939060157,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 1,
+    "tokens": 1286,
+    "decode_tps": 94.23509609741993,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 45.75875353758792,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 1,
+    "tokens": 1027,
+    "decode_tps": 59.25404943389132,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 35.193642857863104,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 2,
+    "tokens": 1286,
+    "decode_tps": 93.12048223938491,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 46.30646699001925,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 2,
+    "tokens": 1027,
+    "decode_tps": 58.90322323340113,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 35.40325535998899,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 3,
+    "tokens": 1286,
+    "decode_tps": 93.41290153347435,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 46.16150945025002,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 3,
+    "tokens": 1027,
+    "decode_tps": 58.87781067898355,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 35.41853594095863,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 0,
+    "tokens": 1238,
+    "decode_tps": 84.69778177686584,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 48.68289637379348,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 0,
+    "tokens": 877,
+    "decode_tps": 55.95001767916288,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 36.07564864944117,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 1,
+    "tokens": 1238,
+    "decode_tps": 90.0886666755988,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 45.76972315708796,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 1,
+    "tokens": 877,
+    "decode_tps": 56.274937712993356,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 35.86735519846635,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 2,
+    "tokens": 1238,
+    "decode_tps": 91.6793240612654,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 44.97560791981717,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 2,
+    "tokens": 877,
+    "decode_tps": 55.27166239538229,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 36.518409113240885,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 3,
+    "tokens": 1238,
+    "decode_tps": 89.76232651006308,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 45.93612369072313,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 3,
+    "tokens": 877,
+    "decode_tps": 55.31033046700029,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 36.49287868434915,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   }
+  ],
+  "B": [
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 0,
+    "tokens": 1286,
+    "decode_tps": 97.41917156364575,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 988
+    },
+    "client_decode_ms_per_reported_round": 44.26316163133855,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 0,
+    "tokens": 1027,
+    "decode_tps": 57.88912079776679,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 535
+    },
+    "client_decode_ms_per_reported_round": 36.02345008734326,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 1,
+    "tokens": 1286,
+    "decode_tps": 97.37117855865466,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 988
+    },
+    "client_decode_ms_per_reported_round": 44.28497837597017,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 1,
+    "tokens": 1027,
+    "decode_tps": 58.03407282732042,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 535
+    },
+    "client_decode_ms_per_reported_round": 35.93347411379369,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 2,
+    "tokens": 1286,
+    "decode_tps": 97.20930935085637,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 988
+    },
+    "client_decode_ms_per_reported_round": 44.35872002082858,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 2,
+    "tokens": 1027,
+    "decode_tps": 58.01477294936757,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 535
+    },
+    "client_decode_ms_per_reported_round": 35.945428166693695,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 3,
+    "tokens": 1286,
+    "decode_tps": 97.16674534605457,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 988
+    },
+    "client_decode_ms_per_reported_round": 44.37815140926548,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 3,
+    "tokens": 1027,
+    "decode_tps": 58.13850765571669,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 535
+    },
+    "client_decode_ms_per_reported_round": 35.868926426657,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 0,
+    "tokens": 1238,
+    "decode_tps": 92.55732017336963,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 938
+    },
+    "client_decode_ms_per_reported_round": 44.54897057963535,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 0,
+    "tokens": 877,
+    "decode_tps": 55.891606156103244,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 443
+    },
+    "client_decode_ms_per_reported_round": 36.11335079700682,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 1,
+    "tokens": 1238,
+    "decode_tps": 92.56590827131961,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 938
+    },
+    "client_decode_ms_per_reported_round": 44.54483740652601,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 1,
+    "tokens": 877,
+    "decode_tps": 55.81238124669124,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 443
+    },
+    "client_decode_ms_per_reported_round": 36.16461320297389,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 2,
+    "tokens": 1238,
+    "decode_tps": 92.12627057700608,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 938
+    },
+    "client_decode_ms_per_reported_round": 44.75741075274224,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 2,
+    "tokens": 877,
+    "decode_tps": 55.72571606155971,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 443
+    },
+    "client_decode_ms_per_reported_round": 36.220856767345204,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 3,
+    "tokens": 1238,
+    "decode_tps": 92.58014290648192,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 938
+    },
+    "client_decode_ms_per_reported_round": 44.5379884269399,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 3,
+    "tokens": 877,
+    "decode_tps": 56.92517473681938,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 443
+    },
+    "client_decode_ms_per_reported_round": 35.45765452728551,
+    "first_plus_rounds_plus_accepted_minus_emitted": 1
+   }
+  ],
+  "A2": [
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 0,
+    "tokens": 1286,
+    "decode_tps": 91.84023204467124,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 46.951977808759764,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 0,
+    "tokens": 1027,
+    "decode_tps": 56.59301219868468,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 36.848468965343464,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 1,
+    "tokens": 1286,
+    "decode_tps": 92.39373172285369,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 46.67070434872536,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 1,
+    "tokens": 1027,
+    "decode_tps": 56.05903013816077,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 37.19946364607147,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 2,
+    "tokens": 1286,
+    "decode_tps": 94.02837212148123,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 45.859355422443144,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 2,
+    "tokens": 1027,
+    "decode_tps": 56.009281428210876,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 37.232505050639254,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "code",
+    "rep": 3,
+    "tokens": 1286,
+    "decode_tps": 96.15807439557962,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1286,
+     "rounds_total": 298,
+     "drafted_total": 1240,
+     "accepted_total": 987
+    },
+    "client_decode_ms_per_reported_round": 44.843665641363735,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 8192,
+    "name": "prose",
+    "rep": 3,
+    "tokens": 1027,
+    "decode_tps": 55.30206050442031,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1027,
+     "rounds_total": 492,
+     "drafted_total": 877,
+     "accepted_total": 534
+    },
+    "client_decode_ms_per_reported_round": 37.70864656104184,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 0,
+    "tokens": 1238,
+    "decode_tps": 86.26270314962402,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 47.7997232034492,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 0,
+    "tokens": 877,
+    "decode_tps": 54.58341727791076,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 36.978871613088565,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 1,
+    "tokens": 1238,
+    "decode_tps": 81.59632966507606,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 50.53331871982664,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 1,
+    "tokens": 877,
+    "decode_tps": 54.84318080279999,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 36.80372199747488,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 2,
+    "tokens": 1238,
+    "decode_tps": 88.40096764197068,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 46.64353166396419,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 2,
+    "tokens": 877,
+    "decode_tps": 54.0894946682126,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 37.316547179903644,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "code",
+    "rep": 3,
+    "tokens": 1238,
+    "decode_tps": 90.73471664804038,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 1238,
+     "rounds_total": 300,
+     "drafted_total": 1196,
+     "accepted_total": 937
+    },
+    "client_decode_ms_per_reported_round": 45.44383324993154,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   },
+   {
+    "words": 125000,
+    "name": "prose",
+    "rep": 3,
+    "tokens": 877,
+    "decode_tps": 52.43262129329066,
+    "counters": {
+     "requests_total": 1,
+     "completion_tokens_total": 877,
+     "rounds_total": 434,
+     "drafted_total": 796,
+     "accepted_total": 442
+    },
+    "client_decode_ms_per_reported_round": 38.49575187998055,
+    "first_plus_rounds_plus_accepted_minus_emitted": 0
+   }
+  ]
+ },
+ "input_sha256": {
+  "A1": "812c4a8973e06834596bc42b31bb5e9d0f3c1b042d3df6c7da5be4ab10e0d9d3",
+  "B": "e7c0c68ad1cd8db690b659b198520f5d23ee675ebf08df2a88e87433f7ab0c40",
+  "A2": "92ffe054913c83111899dcfcd3637c5a0e29d8d188bbc1cf726ad6c11ff40c7a"
+ },
+ "limitations": [
+  "Solo requests only; concurrent health deltas are group totals.",
+  "Accepted counters have different stop-trimming semantics across runtimes.",
+  "Client time divided by reported rounds is not GPU forward latency.",
+  "Different round counts suggest scheduling work; they do not establish a winning policy."
+ ]
+}

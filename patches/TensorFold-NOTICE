@@ -1,0 +1,52 @@
+TensorFold
+Copyright 2026 TensorFold contributors
+https://github.com/ashhart/TensorFold
+
+TensorFold is licensed under the Apache License, Version 2.0 (LICENSE) from 0.6.0.
+Releases up to 0.5.0 were MIT-licensed, and code written before 0.6.0 keeps its
+MIT notice in LICENSES/MIT.txt. Third-party code and its licenses are listed in
+THIRD_PARTY_NOTICES.md.
+
+----------------------------------------------------------------------------------------------------------------------
+Changes in this fork (Apache License 2.0, section 4(b))
+
+This is a fork of TensorFold 1.0.2 (upstream commit f8fe17d) by BertholomusAI (Albert Lee,
+https://github.com/bertholomus), Copyright 2026. It adds the dsv41 model family for DeepSeek-V4.1-Flash on TensorFold
+1.0's native Zig engine, tensor-parallel over two NVIDIA GB10 nodes, with image input. TensorFold's text above,
+LICENSE, the upstream files in LICENSES/ and the upstream sections of THIRD_PARTY_NOTICES.md are unchanged.
+
+Added:
+  zig/src/families/dsv41/                  the model family (model, prompt and decode paths, kernels' launches,
+                                           the RDMA ring, the follower rank tf-dsv41-lanes, the vision tower)
+  zig/kernels/cuda/dsv41/                  the family's CUDA kernels
+  zig/src/server/tool_parse.zig, tool_parse_test.zig   DeepSeek-V4.1's DSML tool calls
+  tools/dsv41-zig/                         recording and comparison tools, and ATTRIBUTION.md
+  LICENSES/Pillow-MIT-CMU.txt, LICENSES/PyTorch-BSD-3-Clause.txt, LICENSES/CUTLASS-BSD-3-Clause.txt
+  A "DeepSeek-V4.1-Flash on CUDA (Zig)" section in THIRD_PARTY_NOTICES.md, and a fork note at the top of README.md.
+
+Modified upstream files:
+  zig/build/cuda.zig               build steps for the dsv41 family, its kernels, tf-dsv41-lanes and the vision tower
+  zig/src/core/engine_api.zig      image spans and an engine's reasoning-effort numbers in the engine API
+  zig/src/core/lane_host.zig       images through the lane host; a request the pool cannot hold yet waits for a
+                                   stream to end instead of failing
+  zig/src/core/lanes/stream.zig    a stream's image spans
+  zig/src/cuda/aot.zig             a launch with no captured Triton variant runs the closest more general one
+  zig/src/cuda/driver.zig          the driver's entry points resolved after cuInit; entry points the family uses
+  zig/src/cuda/kernels.zig         the family's kernel modules
+  zig/src/cuda/launch.zig          launch helpers the family uses
+  zig/src/cuda/nccl.zig            NCCL send/recv entry points
+  zig/src/native/cuda.zig          the dsv41 family registered with the native server (efforts, images, kept prompts)
+  zig/src/server/chat.zig          image content parts; return_token_ids puts the reply's ids in its tensorfold block
+  zig/src/server/hf_text.zig       an engine's reasoning-effort numbers
+  zig/src/server/messages.zig      image parts: data URLs, every image format and the refusals
+  zig/src/server/model_text.zig    an engine's reasoning-effort numbers
+  zig/src/server/openai.zig        image parts and return_token_ids
+  zig/src/server/prompt.zig        image prompts; reasoning-effort numbers
+  zig/src/server/reply_text.zig    DSML tool calls
+  zig/src/server/root.zig          the tool-call parser's module
+  zig/src/server/server.zig        an engine's reasoning-effort numbers
+  zig/src/server/tool_parse.zig    DSML tool calls
+  zig/src/server/tool_parse_test.zig   tests for them
+  THIRD_PARTY_NOTICES.md           the DeepSeek-V4.1 section
+
+The "git log" of this branch and tools/dsv41-zig/ATTRIBUTION.md describe the changes and their sources.

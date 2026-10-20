@@ -1,0 +1,69 @@
+#!/bin/bash
+# blackfold-native start|stop|status: DeepSeek-V4.1-Flash-1017 TP2 on TensorFold native
+# (629c524 + patches/0001-0003), rank 0 on the head (run this there), rank 1 on the worker.
+# Two RoCE rails when both nodes' twins align (blackfold-rail-align), otherwise one rail.
+# Configure with deploy/blackfold.env (see blackfold.env.example).
+set -euo pipefail
+. "$(dirname "$0")/blackfold.env"
+NAME=ds41-native
+W="ssh -n -o BatchMode=yes $WORKER_SSH"
+
+stop() {
+  docker rm -f $NAME >/dev/null 2>&1 && echo "rank 0 stopped" || true
+  $W "docker rm -f $NAME >/dev/null 2>&1 && echo 'rank 1 stopped' || true"
+}
+
+status() {
+  curl -s -m 5 "http://$HEAD_ADDR:$PORT/health" || echo "no answer on :$PORT"; echo
+  docker logs $NAME 2>&1 | grep -E "RDMA rank .* rail" || true
+}
+
+primary_gid() {  # IPv4 RoCE v2 GID index on the primary device, run locally or via $W
+  echo 'for i in $(seq 0 15); do g=$(cat /sys/class/infiniband/'"$PRIMARY_HCA"'/ports/1/gids/$i 2>/dev/null); t=$(cat /sys/class/infiniband/'"$PRIMARY_HCA"'/ports/1/gid_attrs/types/$i 2>/dev/null); [[ $g == 0000:0000:0000:0000:0000:ffff:* && $t == "RoCE v2" ]] && echo $i && break; done'
+}
+
+start() {
+  if docker ps -q --filter name=^/$NAME$ | grep -q . || $W "docker ps -q --filter name=^/$NAME\$" | grep -q .; then
+    echo "refusing: $NAME is running; stop it first" >&2; exit 1; fi
+  if [ -n "$HEAD_SHA256" ]; then
+    [ "$(sha256sum $HEAD_BUILD/engine/zig-out/native/bin/tensorfold-native | cut -d' ' -f1)" = "$HEAD_SHA256" ] || { echo "head binary changed" >&2; exit 1; }
+  fi
+  if [ -n "$WORKER_SHA256" ]; then
+    [ "$($W "sha256sum $WORKER_BUILD/engine/zig-out/bin/tf-dsv41-lanes" | cut -d' ' -f1)" = "$WORKER_SHA256" ] || { echo "worker binary changed" >&2; exit 1; }
+  fi
+  if g0=$(sudo -n /usr/local/bin/blackfold-rail-align) && g1=$($W "sudo -n /usr/local/bin/blackfold-rail-align"); then
+    RDMA=$PRIMARY_HCA,$TWIN_HCA
+  else
+    echo "WARNING: twin GID alignment failed; starting on ONE rail" >&2
+    RDMA=$PRIMARY_HCA; g0=$(bash -c "$(primary_gid)"); g1=$($W "bash -c '$(primary_gid)'")
+  fi
+  echo "rails=$RDMA gid: head=$g0 worker=$g1"
+  drop="sync; echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null"
+  bash -c "$drop"; $W "$drop"
+  common="-e NCCL_SOCKET_IFNAME=$PRIMARY_NETDEV -e NCCL_IB_HCA=$RDMA -e TF_RDMA_DEVICES=$RDMA \
+    -e TF_DS_REPLAY_FLOOR=1 -e TF_DS_GRAPHS=1 -e TF_DS_HC_SIDE=1 -e TF_DS_L2_PREFETCH=1 -e TF_DS_ENGRAM_AIO=1 \
+    -e TF_DS_STREAMS=4 -e TF_TP_WORLD=2 -e TF_TP_MASTER=$HEAD_ADDR -e TF_TP_PORT=29620 \
+    -e TF_DS_RANK_CACHE=/cache/tf-ds-rank -e TF_DS_KIT=/kit -e TENSORFOLD_CUDA_KERNELS=/kit/aot \
+    -e TF_DS_ENGRAM=/engram -e TF_DS_TOKEN_MAP=/cache/dsv41_token_map.json"
+  base="docker run -d --name $NAME --restart no --gpus all --network host --ipc host --ulimit memlock=-1 \
+    --ulimit stack=67108864 --cap-add IPC_LOCK --device /dev/infiniband"
+  mounts() { echo "-v $1/engine/zig-out:/native:ro -v $2:/kit:ro -v $MODEL_DIR:/model:ro \
+    -v $ENGRAM_DIR:/engram:ro -v $CACHE_DIR:/cache:ro -v $3:/model/chat_template.jinja:ro"; }
+  $W "$base $(mounts $WORKER_BUILD $WORKER_KIT $WORKER_TEMPLATE) $common \
+    -e NCCL_IB_GID_INDEX=$g1 -e TF_RDMA_GID_INDEX=$g1 $IMAGE \
+    /native/bin/tf-dsv41-lanes /model /cache/tf-ds-rank 1 2 $HEAD_ADDR 29620 /kit --engram /engram \
+    --token-map /cache/dsv41_token_map.json --pool 1048576 --rdma $RDMA --graphs 1 --side 1 --prefetch 1 \
+    --aio 1 --streams 4" >/dev/null
+  $base $(mounts $HEAD_BUILD $HEAD_KIT $HEAD_TEMPLATE) $common -e NCCL_IB_GID_INDEX=$g0 -e TF_RDMA_GID_INDEX=$g0 $IMAGE \
+    /native/native/bin/tensorfold-native serve /model --host 0.0.0.0 --port $PORT \
+    --name $SERVED_NAME --context 1048576 --parallel 4 --thinking --max-tokens 4096 \
+    --temperature 1 --top-p 0.95 --top-k 20 --backend cuda --no-update-check >/dev/null
+  for i in $(seq 1 120); do
+    curl -s -m 3 "http://$HEAD_ADDR:$PORT/v1/models" | grep -q "$SERVED_NAME" && \
+      ! curl -s -m 3 "http://$HEAD_ADDR:$PORT/health" | grep -q '"warming": *true' && { status; exit 0; }
+    sleep 5
+  done
+  echo "native did not become ready in 10 min" >&2; exit 1
+}
+
+case ${1:-} in start) start ;; stop) stop ;; status) status ;; *) echo "usage: $0 start|stop|status" >&2; exit 2 ;; esac

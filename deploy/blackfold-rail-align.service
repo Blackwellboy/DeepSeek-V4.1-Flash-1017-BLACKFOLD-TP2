@@ -1,0 +1,14 @@
+[Unit]
+Description=BLACKFOLD: address the twin RoCE link and align its GID index with the primary link
+After=NetworkManager-wait-online.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+ExecStart=/usr/local/bin/blackfold-rail-align
+TimeoutStartSec=2min
+
+[Install]
+WantedBy=multi-user.target

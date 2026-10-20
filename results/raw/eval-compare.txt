@@ -1,0 +1,18 @@
+subset digest 09c2e6cc43e275af; reference = deepseek
+
+== gsm8k, thinking off (n=100)
+  eval-blackfold  96.0%  [90.2-98.4]  unparsed 0  length-cut 0  errors 0  mean tokens    147  | vs deepseek: same answer  98.0%, +1/-1, McNemar p=1.00
+  deepseek    96.0%  [90.2-98.4]  unparsed 0  length-cut 0  errors 0  mean tokens    148
+
+== gsm8k, thinking on (n=100)
+  eval-blackfold  96.0%  [90.2-98.4]  unparsed 2  length-cut 2  errors 0  mean tokens    424  | vs deepseek: same answer  96.0%, +1/-2, McNemar p=1.00
+  deepseek    97.0%  [91.5-99.0]  unparsed 0  length-cut 0  errors 0  mean tokens    392
+
+== mmlu, thinking off (n=200)
+  eval-blackfold  84.5%  [78.8-88.9]  unparsed 1  length-cut 1  errors 0  mean tokens      2  | vs deepseek: same answer  97.0%, +3/-3, McNemar p=1.00
+  deepseek    84.5%  [78.8-88.9]  unparsed 1  length-cut 1  errors 0  mean tokens      1
+
+== mmlu, thinking on (n=200)
+  eval-blackfold  90.5%  [85.6-93.8]  unparsed 8  length-cut 8  errors 0  mean tokens    741  | vs deepseek: same answer  94.5%, +1/-6, McNemar p=0.12
+  deepseek    93.0%  [88.6-95.8]  unparsed 3  length-cut 3  errors 0  mean tokens    634
+

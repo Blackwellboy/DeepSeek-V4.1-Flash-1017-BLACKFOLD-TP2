@@ -1,0 +1,100 @@
+{
+ "cmd": "concurrent",
+ "base": "http://127.0.0.1:18191",
+ "model": "DeepSeek-v4.1-Flash-1017-heretic-tf",
+ "unix": 1792474857.741635,
+ "result": [
+  {
+   "streams": 2,
+   "rep": 0,
+   "max_tokens": 384,
+   "total_tokens": 768,
+   "wall_s": 9.48018787917681,
+   "aggregate_tps": 81.01105271203627,
+   "per_stream_decode_tps": [
+    72.831,
+    41.123
+   ],
+   "per_stream_tokens": [
+    384,
+    384
+   ],
+   "ttft_s": [
+    0.344,
+    0.166
+   ]
+  },
+  {
+   "streams": 2,
+   "rep": 1,
+   "max_tokens": 384,
+   "total_tokens": 768,
+   "wall_s": 9.084718113066629,
+   "aggregate_tps": 84.53757072499354,
+   "per_stream_decode_tps": [
+    72.912,
+    42.761
+   ],
+   "per_stream_tokens": [
+    384,
+    384
+   ],
+   "ttft_s": [
+    0.307,
+    0.128
+   ]
+  },
+  {
+   "streams": 4,
+   "rep": 0,
+   "max_tokens": 384,
+   "total_tokens": 1536,
+   "wall_s": 13.67362112691626,
+   "aggregate_tps": 112.33308175962354,
+   "per_stream_decode_tps": [
+    41.508,
+    28.651,
+    57.383,
+    40.278
+   ],
+   "per_stream_tokens": [
+    384,
+    384,
+    384,
+    384
+   ],
+   "ttft_s": [
+    0.599,
+    0.305,
+    0.424,
+    0.181
+   ]
+  },
+  {
+   "streams": 4,
+   "rep": 1,
+   "max_tokens": 384,
+   "total_tokens": 1536,
+   "wall_s": 12.409755948930979,
+   "aggregate_tps": 123.77358638808015,
+   "per_stream_decode_tps": [
+    46.387,
+    31.183,
+    72.003,
+    46.371
+   ],
+   "per_stream_tokens": [
+    384,
+    384,
+    384,
+    384
+   ],
+   "ttft_s": [
+    0.304,
+    0.127,
+    0.6,
+    0.482
+   ]
+  }
+ ]
+}

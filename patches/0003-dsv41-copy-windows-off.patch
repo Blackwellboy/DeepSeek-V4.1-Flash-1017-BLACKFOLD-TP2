@@ -1,0 +1,82 @@
+diff --git a/zig/src/core/lanes/config.zig b/zig/src/core/lanes/config.zig
+index c33a8cf..e374097 100644
+--- a/zig/src/core/lanes/config.zig
++++ b/zig/src/core/lanes/config.zig
+@@ -12,6 +12,7 @@ pub const default_prior = [_]f64{ 0.85, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.5, 0.
+ 
+ /// What a backend reports about its loaded model: the attributes the Python engine reads at setup.
+ pub const Model = struct {
++    copy_proposals: bool = true, // BLACKFOLD opt-out of suffix-lookup copy windows; true retains upstream
+     solo_head_overhead_ms: ?f64 = null, // BLACKFOLD opt-in cost allowance; null retains live overhead
+     exact_width: u32 = 1, // the widest window that reproduces one-token steps bit for bit
+     first_copy_rows: u32 = 0, // a lone stream's first copy window (0: the exact width)
+@@ -36,6 +37,7 @@ pub const Model = struct {
+ };
+ 
+ pub const Config = struct {
++    copy_proposals: bool = true, // BLACKFOLD opt-out of suffix-lookup copy windows; true retains upstream
+     solo_head_overhead_ms: ?f64 = null, // BLACKFOLD opt-in cost allowance; null retains live overhead
+     family_width: u32,
+     max_copy: u32,
+@@ -122,6 +124,7 @@ pub const Config = struct {
+             .lane_costs = try alloc.extendCosts(gpa, m.lane_costs, 64),
+             .mtp_step_ms = m.mtp_step_ms,
+             .solo_head_overhead_ms = m.solo_head_overhead_ms,
++            .copy_proposals = m.copy_proposals,
+         };
+     }
+ 
+@@ -158,3 +161,13 @@ test "BLACKFOLD solo allowance rejects invalid costs before allocating" {
+             Config.init(std.testing.allocator, .{ .solo_head_overhead_ms = cost }, 8, 7));
+     }
+ }
++
++test "BLACKFOLD copy windows stay on unless a backend opts out" {
++    const a = std.testing.allocator;
++    var original = try Config.init(a, .{}, 8, 7);
++    defer original.deinit(a);
++    try std.testing.expect(original.copy_proposals);
++    var off = try Config.init(a, .{ .copy_proposals = false }, 8, 7);
++    defer off.deinit(a);
++    try std.testing.expect(!off.copy_proposals);
++}
+diff --git a/zig/src/core/lanes/windows.zig b/zig/src/core/lanes/windows.zig
+index 060a5d7..eaa124f 100644
+--- a/zig/src/core/lanes/windows.zig
++++ b/zig/src/core/lanes/windows.zig
+@@ -133,7 +133,7 @@ fn headTrunk(e: *Engine, s: *Stream, p: Plan, levels: usize) !?fill.Trunk {
+ /// Copied spans backed by `enter_match` matching tokens (Python `_copy_proposal`); the proposer owns them.
+ pub fn copyProposal(e: *Engine, s: *Stream) ![]const u32 {
+     const p = s.proposer orelse return &.{};
+-    if (e.cfg.max_copy == 0 or s.force.items.len > 0) return &.{};
++    if (!copyAllowed(e.cfg.copy_proposals, e.cfg.max_copy, s.force.items.len)) return &.{};
+     const width: u32 = if (e.alone) (s.copy_width orelse e.cfg.first_copy) else e.cfg.first_copy;
+     const copied = p.propose(s.context.items, @min(@as(i64, width), s.draftRoom() - 1)) catch return &.{};
+     if (copied.len < 2 or p.lastMatch() < e.cfg.enter_match) return &.{};
+@@ -252,3 +252,14 @@ test "BLACKFOLD fixed cost excludes shared, copied, forced and unconfigured wind
+         try std.testing.expectEqual(@as(f64, 8.0), soloHeadOverhead(3.5, 8.0, true, 1, kind));
+     }
+ }
++
++// BLACKFOLD experiment: a backend may opt out of suffix-lookup copies; upstream gates otherwise unchanged.
++fn copyAllowed(enabled: bool, max_copy: u32, forced: usize) bool {
++    return enabled and max_copy != 0 and forced == 0;
++}
++test "BLACKFOLD copy opt-out only closes the copy gate" {
++    try std.testing.expect(copyAllowed(true, 5, 0));
++    try std.testing.expect(!copyAllowed(false, 5, 0));
++    try std.testing.expect(!copyAllowed(true, 0, 0));
++    try std.testing.expect(!copyAllowed(true, 5, 2));
++}
+diff --git a/zig/src/families/dsv41/lanes.zig b/zig/src/families/dsv41/lanes.zig
+index eddf8b0..8c02fab 100644
+--- a/zig/src/families/dsv41/lanes.zig
++++ b/zig/src/families/dsv41/lanes.zig
+@@ -372,6 +372,7 @@ pub const Lanes = struct {
+             .window_costs = self.wc[0..],
+             .mtp_step_ms = draft.draft_ms,
+             .solo_head_overhead_ms = if (drafting) draft.draft_ms else null, // BLACKFOLD: DeepSeek solo only
++            .copy_proposals = !drafting, // BLACKFOLD: no suffix copies beside the draft head, like Python multi.py
+             .streams_exact = true,
+             .hidden_rows = true,
+             .batch_rows = @intCast(self.m.eng.round_rows),

@@ -1,0 +1,42 @@
+#!/bin/bash
+# blackfold-rail-align: give this node's twin RoCE link its IPv4 address, then move the twin's IPv4
+# RoCE v2 GID to the SAME index as the primary link's. TensorFold takes one GID index per node, so a
+# mismatch breaks the second rail. Prints the aligned index; exits 0 only if aligned.
+# GID slots fill lowest-free: an extra IPv6 link-local filler on the twin moves its IPv4 up by one
+# pair; removing fillers moves it down. Never touches the primary link.
+# Config: /etc/blackfold-rail.env (PRIMARY_HCA, TWIN_HCA, TWIN_NETDEV, TWIN_ADDR).
+set -u
+. /etc/blackfold-rail.env
+P=$PRIMARY_HCA; T=$TWIN_HCA; TDEV=$TWIN_NETDEV
+
+v4idx() {  # index of the IPv4-mapped RoCE v2 GID on device $1, or -1
+  local i g t
+  for i in $(seq 0 15); do
+    g=$(cat /sys/class/infiniband/$1/ports/1/gids/$i 2>/dev/null) || continue
+    t=$(cat /sys/class/infiniband/$1/ports/1/gid_attrs/types/$i 2>/dev/null)
+    if [[ $g == 0000:0000:0000:0000:0000:ffff:* && $t == "RoCE v2" ]]; then echo "$i"; return; fi
+  done
+  echo -1
+}
+
+want=$(v4idx $P)
+[ "$want" -ge 0 ] || { echo "blackfold-rail-align: primary $P has no IPv4 RoCE v2 GID" >&2; exit 3; }
+[ "$(cat /sys/class/net/$TDEV/mtu)" = 9000 ] || sudo -n ip link set dev $TDEV mtu 9000
+ip -4 -o addr show dev $TDEV | grep -q " $TWIN_ADDR " || sudo -n ip addr add $TWIN_ADDR dev $TDEV
+sleep 1
+
+for attempt in 1 2 3 4; do
+  got=$(v4idx $T)
+  if [ "$got" = "$want" ]; then echo "$want"; exit 0; fi
+  sudo -n ip addr del $TWIN_ADDR dev $TDEV
+  if [ "$got" -lt "$want" ]; then
+    sudo -n ip -6 addr add fe80::bf:$attempt/64 dev $TDEV nodad
+  else
+    for a in $(ip -6 -o addr show dev $TDEV | awk '$4 ~ /^fe80::bf:/ {print $4}'); do sudo -n ip -6 addr del "$a" dev $TDEV; done
+  fi
+  sleep 1
+  sudo -n ip addr add $TWIN_ADDR dev $TDEV
+  sleep 1
+done
+echo "blackfold-rail-align: twin GID $(v4idx $T) != primary $want after 4 attempts" >&2
+exit 4

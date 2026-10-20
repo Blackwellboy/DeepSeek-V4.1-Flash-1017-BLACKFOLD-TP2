@@ -1,0 +1,103 @@
+diff --git a/zig/src/core/lanes/config.zig b/zig/src/core/lanes/config.zig
+index a525638..c33a8cf 100644
+--- a/zig/src/core/lanes/config.zig
++++ b/zig/src/core/lanes/config.zig
+@@ -12,6 +12,7 @@ pub const default_prior = [_]f64{ 0.85, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.5, 0.
+ 
+ /// What a backend reports about its loaded model: the attributes the Python engine reads at setup.
+ pub const Model = struct {
++    solo_head_overhead_ms: ?f64 = null, // BLACKFOLD opt-in cost allowance; null retains live overhead
+     exact_width: u32 = 1, // the widest window that reproduces one-token steps bit for bit
+     first_copy_rows: u32 = 0, // a lone stream's first copy window (0: the exact width)
+     gpu_tokens: bool = false, // one-token rounds may run a step ahead (pipelined)
+@@ -35,6 +36,7 @@ pub const Model = struct {
+ };
+ 
+ pub const Config = struct {
++    solo_head_overhead_ms: ?f64 = null, // BLACKFOLD opt-in cost allowance; null retains live overhead
+     family_width: u32,
+     max_copy: u32,
+     first_copy: u32,
+@@ -67,6 +69,9 @@ pub const Config = struct {
+ 
+     pub fn init(gpa: Allocator, m: Model, max_rows: u32, max_draft: u32) !Config {
+         if (max_rows < 1) return error.BadMaxRows;
++        if (m.solo_head_overhead_ms) |cost| {
++            if (!std.math.isFinite(cost) or cost < 0.0) return error.BadSoloHeadOverhead;
++        }
+         const width: u32 = @max(1, @min(@max(m.exact_width, 1), max_rows));
+         const max_copy = width - 1;
+         const first_rows: i64 = if (m.first_copy_rows != 0) m.first_copy_rows else width;
+@@ -116,6 +121,7 @@ pub const Config = struct {
+             .shared_costs = try alloc.extendCosts(gpa, timed.items, batch_rows),
+             .lane_costs = try alloc.extendCosts(gpa, m.lane_costs, 64),
+             .mtp_step_ms = m.mtp_step_ms,
++            .solo_head_overhead_ms = m.solo_head_overhead_ms,
+         };
+     }
+ 
+@@ -136,3 +142,19 @@ test "setup derives widths like Python" {
+     try std.testing.expectEqual(@as(u32, 4), c.most_drafts);
+     try std.testing.expect(c.family_mtp and c.family_streams);
+ }
++
++test "BLACKFOLD solo allowance is opt-in and preserved by setup" {
++    const a = std.testing.allocator;
++    var original = try Config.init(a, .{}, 8, 7);
++    defer original.deinit(a);
++    try std.testing.expect(original.solo_head_overhead_ms == null);
++    var selected = try Config.init(a, .{ .solo_head_overhead_ms = 3.5 }, 8, 7);
++    defer selected.deinit(a);
++    try std.testing.expectEqual(@as(?f64, 3.5), selected.solo_head_overhead_ms);
++}
++test "BLACKFOLD solo allowance rejects invalid costs before allocating" {
++    for ([_]f64{ -1.0, std.math.inf(f64), std.math.nan(f64) }) |cost| {
++        try std.testing.expectError(error.BadSoloHeadOverhead,
++            Config.init(std.testing.allocator, .{ .solo_head_overhead_ms = cost }, 8, 7));
++    }
++}
+diff --git a/zig/src/core/lanes/windows.zig b/zig/src/core/lanes/windows.zig
+index a76e4ed..060a5d7 100644
+--- a/zig/src/core/lanes/windows.zig
++++ b/zig/src/core/lanes/windows.zig
+@@ -173,7 +173,8 @@ pub fn allocate(e: *Engine, plans: []Plan) !void {
+             pr.* = try nodeChances(e, p.stream, n);
+         }
+     }
+-    const counts = try alloc.allocate(a, fixed, probs, &e.cfg.shared_costs, e.rule.overheadMs(plans.len), @max(plans.len, e.cfg.batch_rows));
++    const overhead = soloHeadOverhead(e.cfg.solo_head_overhead_ms, e.rule.overheadMs(plans.len), e.alone, plans.len, if (plans.len > 0) plans[0].kind else .none);
++    const counts = try alloc.allocate(a, fixed, probs, &e.cfg.shared_costs, overhead, @max(plans.len, e.cfg.batch_rows));
+     for (plans, probs, counts) |*p, chances, c| {
+         if (p.kind == .head) p.stream.granted = c;
+         if (chances.len == 0 or c == chances.len) continue;
+@@ -236,3 +237,18 @@ pub fn tokens(e: *Engine, w: be.Window, o: be.Verified) ![]u32 {
+     @memcpy(out[1 + w.held ..], w.tokens);
+     return out;
+ }
++
++// BLACKFOLD experiment: only an opted-in, truly solo head window uses fixed cost.
++fn soloHeadOverhead(fixed: ?f64, observed: f64, alone: bool, streams: usize, kind: Kind) f64 {
++    if (alone and streams == 1 and kind == .head) return fixed orelse observed;
++    return observed;
++}
++test "BLACKFOLD fixed cost excludes shared, copied, forced and unconfigured windows" {
++    try std.testing.expectEqual(@as(f64, 3.5), soloHeadOverhead(3.5, 8.0, true, 1, .head));
++    try std.testing.expectEqual(@as(f64, 8.0), soloHeadOverhead(null, 8.0, true, 1, .head));
++    try std.testing.expectEqual(@as(f64, 8.0), soloHeadOverhead(3.5, 8.0, false, 1, .head));
++    try std.testing.expectEqual(@as(f64, 8.0), soloHeadOverhead(3.5, 8.0, true, 2, .head));
++    for ([_]Kind{ .copy, .forced, .fill, .none }) |kind| {
++        try std.testing.expectEqual(@as(f64, 8.0), soloHeadOverhead(3.5, 8.0, true, 1, kind));
++    }
++}
+diff --git a/zig/src/families/dsv41/lanes.zig b/zig/src/families/dsv41/lanes.zig
+index fdbb000..eddf8b0 100644
+--- a/zig/src/families/dsv41/lanes.zig
++++ b/zig/src/families/dsv41/lanes.zig
+@@ -371,6 +371,7 @@ pub const Lanes = struct {
+             .drafts = if (self.m.dr) |dr| @intCast(dr.n) else 1,
+             .window_costs = self.wc[0..],
+             .mtp_step_ms = draft.draft_ms,
++            .solo_head_overhead_ms = if (drafting) draft.draft_ms else null, // BLACKFOLD: DeepSeek solo only
+             .streams_exact = true,
+             .hidden_rows = true,
+             .batch_rows = @intCast(self.m.eng.round_rows),

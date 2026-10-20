@@ -1,0 +1,94 @@
+{
+ "aggregate_mean_of_8": {
+  "1": 75.89,
+  "2": 106.58,
+  "3": 127.95,
+  "4": 135.91
+ },
+ "c1_per_stream_mean_of_8": 87.61,
+ "c1_per_stream": {
+  "coding": 112.99,
+  "json": 100.59,
+  "narrative": 56.74,
+  "prose": 65.1,
+  "math": 107.93,
+  "reasoning": 86.44,
+  "summary": 56.87,
+  "format": 114.23
+ },
+ "prefill": [
+  {
+   "target": 2000,
+   "prompt_tokens": 2950,
+   "ttft_s": 1.868,
+   "prefill_tok_s": 1579.2
+  },
+  {
+   "target": 8000,
+   "prompt_tokens": 11592,
+   "ttft_s": 6.566,
+   "prefill_tok_s": 1765.5
+  },
+  {
+   "target": 32000,
+   "prompt_tokens": 46810,
+   "ttft_s": 23.627,
+   "prefill_tok_s": 1981.2
+  },
+  {
+   "target": 64000,
+   "prompt_tokens": 93335,
+   "ttft_s": 47.618,
+   "prefill_tok_s": 1960.1
+  },
+  {
+   "target": 128000,
+   "prompt_tokens": 186773,
+   "ttft_s": 98.761,
+   "prefill_tok_s": 1891.2
+  }
+ ],
+ "categories_per_level": {
+  "1": {
+   "coding": 103.24,
+   "json": 78.2,
+   "narrative": 53.88,
+   "prose": 60.83,
+   "math": 96.06,
+   "reasoning": 79.02,
+   "summary": 46.64,
+   "format": 89.22
+  },
+  "2": {
+   "coding": 149.19,
+   "json": 94.4,
+   "narrative": 78.09,
+   "prose": 79.97,
+   "math": 127.22,
+   "reasoning": 107.8,
+   "summary": 79.32,
+   "format": 136.66
+  },
+  "3": {
+   "coding": 181.85,
+   "json": 107.35,
+   "narrative": 95.12,
+   "prose": 120.59,
+   "math": 163.18,
+   "reasoning": 124.13,
+   "summary": 87.89,
+   "format": 143.48
+  },
+  "4": {
+   "coding": 181.56,
+   "json": 110.77,
+   "narrative": 104.35,
+   "prose": 127.44,
+   "math": 179.98,
+   "reasoning": 144.67,
+   "summary": 94.49,
+   "format": 144.06
+  }
+ },
+ "method": "tonyd2wild v41bench_tf.py, pointed at the model's encoding folder; every measurement completed, its own JSON save failed on a missing output folder, so values are parsed from its printed log"
+}

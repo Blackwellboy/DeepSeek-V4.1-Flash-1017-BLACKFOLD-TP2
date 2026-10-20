@@ -1,0 +1,6 @@
+#!/bin/sh
+# NetworkManager dispatcher hook (/etc/NetworkManager/dispatcher.d/, 0755 root): NM strips the
+# twin's externally added IPv4 whenever it re-activates the profile, so re-run the align unit.
+. /etc/blackfold-rail.env
+[ "$1" = "$TWIN_NETDEV" ] || exit 0
+case "$2" in up|reapply) systemctl restart --no-block blackfold-rail-align.service ;; esac
