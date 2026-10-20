@@ -1,18 +1,17 @@
 # Patches against TensorFold `629c524`
 
 Base: [bertholomus/TensorFold](https://github.com/bertholomus/TensorFold) branch `deepseek-v41-zig`,
-commit `629c524a0ea57512a5342abb498d1b7c25353343`. Apply in order:
+commit `6366d2c585b4f05fe33bfe5cbdb33ea15264841a` (the same patches also apply to `629c524`). Apply in order:
 
 ```bash
-git checkout 629c524a0ea57512a5342abb498d1b7c25353343
+git checkout 6366d2c585b4f05fe33bfe5cbdb33ea15264841a
 git apply patches/0001-native-stream-tool-call-whitespace.patch
 git apply patches/0002-dsv41-fixed-solo-head-overhead.patch
 git apply patches/0003-dsv41-copy-windows-off.patch
 ```
 
-Applied in this order to a fresh checkout, they reproduce the sources of the qualified build byte for
-byte. With all three, upstream's host tests pass 224/224 (the 222 upstream and solo-overhead tests plus
-two new ones) and both server suites pass (71 and 30).
+On `6366d2c` all three apply cleanly; host tests pass 227/227 (222 upstream plus 5 new) and both server
+suites pass (72 and 33). Upstream at that commit includes the DSML tool-call fix (#25) that `629c524` lacks.
 
 ## 0001: hold back leading whitespace in streamed tool calls
 

@@ -37,10 +37,10 @@ RoPE tables and the 1017 image-routing bias with its tools, as
 **3. Build the engine (one node, no GPU needed, then copy `zig-out/` to the other).**
 ```bash
 git clone https://github.com/bertholomus/TensorFold && cd TensorFold
-git checkout 629c524a0ea57512a5342abb498d1b7c25353343
+git checkout 6366d2c585b4f05fe33bfe5cbdb33ea15264841a   # includes upstream #25 (DSML tool-call fix)
 git apply ../DeepSeek-V4.1-Flash-1017-BLACKFOLD-TP2/patches/000*.patch
 # inside nvcr.io/nvidia/pytorch:26.07-py3 with Zig 0.17.0 on PATH:
-zig build test        # 224/224
+zig build test        # 227/227
 zig build install native -Dtarget=aarch64-linux-gnu.2.28 -Doptimize=ReleaseFast \
   -Dnvcc=/usr/local/cuda/bin/nvcc -Dsm=121
 ```
@@ -80,7 +80,7 @@ faster on his own tool. The decode-after-128K test has no repeat option and its 
 
 ## What we built
 
-1. **Engine patches** ([patches/](patches/README.md)) on bertholomus/TensorFold `629c524`:
+1. **Engine patches** ([patches/](patches/README.md)) on bertholomus/TensorFold `6366d2c` (they also apply to `629c524`):
    - `0001` holds back leading whitespace in streamed replies until it is clear whether a tool call follows
      (tool-call checks 4/8 to 8/8).
    - `0002` lets a backend use a fixed per-round draft allowance for a lone stream; DeepSeek uses its 3.5 ms,
@@ -92,7 +92,10 @@ faster on his own tool. The decode-after-128K test has no repeat option and its 
    same answer. With 0002 and 0003 it runs exactly 300, and its faster rounds then win.
    [docs/COPY_WINDOWS.md](docs/COPY_WINDOWS.md)
 3. **Two rails** with GID alignment that survives reboots and NetworkManager. [docs/RAILS.md](docs/RAILS.md)
-4. **Deploy scripts** ([deploy/](deploy/README.md)) and every measurement in [results/](results/RESULTS.md):
+4. **Tool calls checked to 250K context:** 32/32 clean (thinking on and off, streamed and not, multi-turn), and
+   24/24 DSML edge cases, including a call to a tool the request did not offer, which `629c524` leaked as raw
+   markup and upstream fixed in #25. [results/](results/RESULTS.md)
+5. **Deploy scripts** ([deploy/](deploy/README.md)) and every measurement in [results/](results/RESULTS.md):
    controlled A/B trials (all outputs identical by token), qualification, same-tool benchmarks and quality.
 
 | 125K-context cell (same pair) | Python engine | Native + patches, 1 rail | Native + patches, 2 rails |

@@ -1,0 +1,25 @@
+{"case": "call_text_in_argument", "prompt_tokens": 8266, "thinking": false, "stream": false, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "call_text_in_argument", "prompt_tokens": 8266, "thinking": false, "stream": true, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "call_text_in_argument", "prompt_tokens": 8291, "thinking": true, "stream": false, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "call_text_in_argument", "prompt_tokens": 8291, "thinking": true, "stream": true, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 8247, "thinking": false, "stream": false, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 8247, "thinking": false, "stream": true, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 8272, "thinking": true, "stream": false, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 8272, "thinking": true, "stream": true, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 8239, "thinking": false, "stream": false, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 8239, "thinking": false, "stream": true, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "The literal string `", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 8264, "thinking": true, "stream": false, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 8264, "thinking": true, "stream": true, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "The literal string `", "problems": []}
+{"case": "call_text_in_argument", "prompt_tokens": 124578, "thinking": false, "stream": false, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "call_text_in_argument", "prompt_tokens": 124578, "thinking": false, "stream": true, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "call_text_in_argument", "prompt_tokens": 124603, "thinking": true, "stream": false, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "call_text_in_argument", "prompt_tokens": 124603, "thinking": true, "stream": true, "calls": ["write_file"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 124559, "thinking": false, "stream": false, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 124559, "thinking": false, "stream": true, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 124584, "thinking": true, "stream": false, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "unoffered_tool", "prompt_tokens": 124584, "thinking": true, "stream": true, "calls": ["send_email"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 124551, "thinking": false, "stream": false, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 124551, "thinking": false, "stream": true, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "The literal string `", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 124576, "thinking": true, "stream": false, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "", "problems": []}
+{"case": "prose_mentions_tag", "prompt_tokens": 124576, "thinking": true, "stream": true, "calls": ["get_weather"], "finish": "tool_calls", "content_head": "The literal string `", "problems": []}
+{"total": 24, "failures": 0}

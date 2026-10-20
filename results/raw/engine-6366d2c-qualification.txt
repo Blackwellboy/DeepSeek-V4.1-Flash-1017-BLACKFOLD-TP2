@@ -1,0 +1,9 @@
+PASS shared prefix: [0, 98304, 18432, 98304]
+PASS protocol: 10/11 fails=[(8, 'tool_result')]
+PASS reasoning: 8/8
+PASS retained prefix: 17/17
+PASS held-out outputs identical: 16 rows, mismatches []
+   decode: {'8192 solo code r0': 98.1, '8192 solo prose r0': 60.7, '8192 solo code r1': 97.9, '8192 solo prose r1': 60.8, '8192 concurrent code r0': 69.3, '8192 concurrent prose r0': 41.2, '8192 concurrent code r1': 69.1, '8192 concurrent prose r1': 41.2, '125000 solo code r0': 93.1, '125000 solo prose r0': 57.2, '125000 solo code r1': 93.1, '125000 solo prose r1': 57.2, '125000 concurrent code r0': 70.6, '125000 concurrent prose r0': 37.7, '125000 concurrent code r1': 69.1, '125000 concurrent prose r1': 38.3}
+PASS long-context tool calls: {'total': 32, 'failures': 0}
+PASS DSML edge cases: {'total': 24, 'failures': 0}, unoffered calls returned 8/8
+ALL PASS

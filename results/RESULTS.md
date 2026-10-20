@@ -1,6 +1,7 @@
 # Results and conditions
 
-Serve: two DGX Spark (GB10) nodes, TP2, TensorFold native `629c524` + `patches/0001-0003`, two RoCE
+Serve: two DGX Spark (GB10) nodes, TP2, TensorFold native + `patches/0001-0003` (`629c524` for the benchmarks and A/B
+trials below; `6366d2c` since the engine refresh), two RoCE
 rails, NIGHTFALL weights (LibertAI EXL3 2.9 bpw + refusal patch), context 1,048,576, 4 parallel streams,
 replay floor, graphs, L2 prefetch and Engram AIO on. Measured 2026-10-20 with no other traffic.
 Comparator figures are each project's own published results for its stock build, on its own hardware.
@@ -52,3 +53,18 @@ return. The same checks passed again on the live serve after the switch.
 One pair of nodes. Two tasks per context size in the A/B trials. Comparators ran on their own hardware
 and network: tonyd2wild's lane also uses two rails; lucataco's uses two RoCE ports. Benchmark tools build
 prompts differently, which is why our prefill is far ahead on kit_bench and behind on v41bench_tf.
+
+## Engine refresh to 6366d2c and tool-call checks
+
+`engine-6366d2c-qualification.txt`: the same patches on upstream `6366d2c`, which adds the native DSML
+tool-call fix (#25). Shared-prefix reuse (98,304 cached tokens on return), strict protocol 10/11, reasoning
+8/8, retained prefix 17/17, and 16/16 held-out replies identical by full token IDs to the earlier reference.
+Decode on the same tasks: 125K solo code 93.1 tok/s, prose 57.2; 8K solo code 98.0, prose 60.8.
+
+`tool-calls-long-context.jsonl`: tool calls behind about 2K, 32K, 125K and 250K tokens of context, thinking on
+and off, streamed and not, single and multi-turn with a prior tool result: 32/32 with correct calls, valid JSON
+arguments, `tool_calls` finish and no raw markup.
+
+`tool-calls-dsml-edge-cases.jsonl`: tool-call text inside an argument, a call to a tool the request did not
+offer, and prose mentioning `<tool_call>` before a real call, at about 8K and 125K: 24/24 clean. On `629c524`
+the unoffered-tool case returned raw DSML as text (not streamed) or dropped the call (streamed) in all 8 runs.
