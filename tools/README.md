@@ -69,3 +69,14 @@ window nobody else is using.
 
 Engine switches reach the containers through `EXTRA_ENV` in `blackfold.env`.
 
+## `engram_slice.py`: keep only each node's half of the Engram tables
+
+See [docs/ENGRAM_DISK.md](../docs/ENGRAM_DISK.md). It has four modes:
+- `--dry-run`: show what each node would keep.
+- `--punch-in-place --yes-punch`: release the other rank's rows in place.
+- `--out DIR`: copy this rank's rows to new files.
+- `--check`: exits 1 unless this node holds every row its rank reads. `deploy/blackfold-native start` runs it on both
+  nodes.
+
+`tools/test_engram_slice.py` tests every mode end to end on synthetic tables.
+

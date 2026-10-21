@@ -98,6 +98,10 @@ next to the numbers each of them published for their stock (censored) builds. Ra
 5. Measure with `tools/bf_lab.py` in both regimes, greedy with thinking off and sampled with thinking on
    ([tools/README.md](tools/README.md)). Two runs of the same build match token for token in either.
 
+**Short on disk?** Each node only reads half of the 189 GB Engram tables.
+[docs/ENGRAM_DISK.md](docs/ENGRAM_DISK.md) gives ~95 GB back per node, in place, with a start-up check that stops a
+node from serving the wrong rank.
+
 ## Issues I hit along the way, and the fixes
 
 The TP2 builds I learned from pin TensorFold commits from before some upstream fixes, so I left a note on each repo.

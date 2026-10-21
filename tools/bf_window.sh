@@ -37,6 +37,7 @@ done
 [ -n "$ARMS" ] && [ -n "$BASE" ] && [ -n "$OUT" ] || { sed -n 2,12p "$0"; exit 2; }
 [ "$OWN" = 1 ] || { echo "refusing: this restarts the serve; pass --i-own-this-window when nobody else uses it" >&2; exit 2; }
 LAB="python3 $here/bf_lab.py"
+export BLACKFOLD_TOOLS="$here"  # the arms' copied deploy scripts find engram_slice.py here
 mkdir -p "$OUT"
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*" | tee -a "$OUT/window.log" >&2; }
 

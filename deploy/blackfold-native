@@ -25,6 +25,16 @@ primary_gid() {  # IPv4 RoCE v2 GID index on the primary device, run locally or 
 start() {
   if docker ps -q --filter name=^/$NAME$ | grep -q . || $W "docker ps -q --filter name=^/$NAME\$" | grep -q .; then
     echo "refusing: $NAME is running; stop it first" >&2; exit 1; fi
+  # Engram rows: each node must hold every row its rank reads (tools/engram_slice.py --check; ENGRAM_CHECK=0 skips).
+  # Matters after --punch-in-place or copied slices: a node prepared for the other rank would read zeros.
+  if [ "${ENGRAM_CHECK:-1}" != 0 ]; then
+    tool="${BLACKFOLD_TOOLS:-$(dirname "$0")/../tools}/engram_slice.py"
+    [ -f "$tool" ] || { echo "refusing: no $tool for the Engram check (ENGRAM_CHECK=0 skips it)" >&2; exit 1; }
+    chk="--config $MODEL_DIR/config.json --src $ENGRAM_DIR --world 2 --check"
+    python3 "$tool" $chk --rank 0 || { echo "refusing: the head's Engram tables lack rank 0's rows" >&2; exit 1; }
+    ssh -o BatchMode=yes "$WORKER_SSH" "python3 - $chk --rank 1" < "$tool" ||
+      { echo "refusing: the worker's Engram tables lack rank 1's rows" >&2; exit 1; }
+  fi
   if [ -n "$HEAD_SHA256" ]; then
     [ "$(sha256sum $HEAD_BUILD/engine/zig-out/native/bin/tensorfold-native | cut -d' ' -f1)" = "$HEAD_SHA256" ] || { echo "head binary changed" >&2; exit 1; }
   fi
