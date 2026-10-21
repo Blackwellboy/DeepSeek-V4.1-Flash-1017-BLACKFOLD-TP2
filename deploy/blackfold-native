@@ -45,6 +45,8 @@ start() {
     -e TF_DS_STREAMS=4 -e TF_TP_WORLD=2 -e TF_TP_MASTER=$HEAD_ADDR -e TF_TP_PORT=29620 \
     -e TF_DS_RANK_CACHE=/cache/tf-ds-rank -e TF_DS_KIT=/kit -e TENSORFOLD_CUDA_KERNELS=/kit/aot \
     -e TF_DS_ENGRAM=/engram -e TF_DS_TOKEN_MAP=/cache/dsv41_token_map.json"
+  # EXTRA_ENV (blackfold.env): "KEY=VALUE KEY=VALUE", passed to both ranks (engine switches for an A/B arm)
+  for kv in ${EXTRA_ENV:-}; do common="$common -e $kv"; done
   base="docker run -d --name $NAME --restart no --gpus all --network host --ipc host --ulimit memlock=-1 \
     --ulimit stack=67108864 --cap-add IPC_LOCK --device /dev/infiniband"
   mounts() { echo "-v $1/engine/zig-out:/native:ro -v $2:/kit:ro -v $MODEL_DIR:/model:ro \

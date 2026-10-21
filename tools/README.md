@@ -48,3 +48,24 @@ Run it on both nodes and compare them: the slower node sets the pace for the pai
 
 `--burn SECONDS` runs a short GPU load to expose a clock stuck low. That is load, so use it only with the serve
 stopped.
+
+## `bf_window.sh`: compare serve configurations in one quiet window
+
+```bash
+tools/bf_window.sh --arms arms.txt --base http://HEAD:18191 --out window --i-own-this-window
+```
+
+`arms.txt` holds one configuration per line: a name, a complete `blackfold.env`, and optional `KEY=VALUE` engine
+switches for both ranks. The first line is the reference.
+
+**What it does:**
+- Starts each arm in turn and warms it up.
+- Records it with `bf_lab.py` at T0 (greedy, thinking off) and T1 (temperature 1.0, thinking on).
+- Restores the reference arm at the end and checks it with a live generation. It restores even after a failure.
+- Writes `report.md`: every arm against the reference, token for token, with rounds and tok/s.
+
+**When it won't run:** while `/health` shows live connections. It restarts the serve once per arm, so give it a
+window nobody else is using.
+
+Engine switches reach the containers through `EXTRA_ENV` in `blackfold.env`.
+

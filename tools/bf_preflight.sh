@@ -42,6 +42,9 @@ else
   kv driver none
 fi
 kv cpu_governor "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo n/a)"
+# anything else holding a core: GB10 shares one power budget between CPU and GPU, and the slower rank sets the pace
+kv cpu_hogs "$(ps -eo pid=,pcpu=,etime=,comm= --sort=-pcpu | awk '$2 > 50 && $4 !~ /^(tensorfold|tf-dsv41|ps$|awk$)/ {printf "%s:%s:%s%%:%s ", $1, $4, $2, $3}')"
+kv loadavg "$(cut -d' ' -f1-3 /proc/loadavg)"
 
 # RDMA rails: state and MTU per device, IPv4 GID index per port
 if [ -d /sys/class/infiniband ]; then
