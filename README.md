@@ -6,6 +6,10 @@
 refusals cut from 94 to 6, the same answers as DeepSeek's own API, 2,008 tok/s cold prefill on a 128K prompt and
 113 tok/s single-stream code decode.
 
+Those speeds are best cases: greedy, thinking off, short prompts, one request. Prose decodes at about 57-65 tok/s,
+and a thinking agent at 150-190K context saw about 57 tok/s. **[Real-world speed](docs/REAL_WORLD_SPEED.md)** shows
+what to expect for your use, and what it takes to get these numbers on your own pair.
+
 This is the TP2 recipe: how to run BLACKFOLD on two GB10 nodes with TensorFold's native engine, the three engine
 patches that make it fast, the two-rail network setup, and every measurement. The weights live on Hugging Face:
 
@@ -61,6 +65,15 @@ curl http://<head>:18191/v1/models
 OpenAI-compatible API on port 18191: 1M context, 4 parallel streams, vision, tool calls, thinking on by default
 (send `chat_template_kwargs: {"enable_thinking": false}` to turn it off per request).
 
+**Before you use it:**
+- Set `max_tokens` on requests. Thinking counts against it; the deploy default is now 32,768.
+- Keep one thinking setting per conversation, so the prompt cache can reuse earlier turns.
+- Leave `top_k` unset or send 1-50: on this engine pin, `top_k` 0 or -1 fails the decode round for every request
+  running at that moment.
+- Set `API_KEY_FILE` in `blackfold.env` if the port is reachable from other machines.
+
+Details: [Real-world speed](docs/REAL_WORLD_SPEED.md).
+
 ## Results
 
 I built on lucataco's and tonyd2wild's TP2 work, so I benchmarked BLACKFOLD with their **own** tools and put it
@@ -74,6 +87,16 @@ next to the numbers each of them published for their stock (censored) builds. Ra
 ![Quality](assets/quality.png)
 
 ![Refusals](assets/refusals.png)
+
+## Getting these numbers on your pair
+
+1. Both RoCE rails, MTU 9000, GID aligned ([docs/RAILS.md](docs/RAILS.md)).
+2. Matched, unthrottled GPUs. Run `tools/bf_preflight.sh` on both nodes and compare them; the slower node sets the pace.
+3. Nothing else running on either node.
+4. One warm-up request at your working context size: the first long reply after a start is slow while the engine
+   prepares its graphs.
+5. Measure with `tools/bf_lab.py` in both regimes, greedy with thinking off and sampled with thinking on
+   ([tools/README.md](tools/README.md)). Two runs of the same build match token for token in either.
 
 ## Issues I hit along the way, and the fixes
 
@@ -110,6 +133,8 @@ The TP2 builds I learned from pin TensorFold commits from before some upstream f
    markup and upstream fixed in #25. [results/](results/RESULTS.md)
 5. **Deploy scripts** ([deploy/](deploy/README.md)) and every measurement in [results/](results/RESULTS.md):
    controlled A/B trials (all outputs identical by token), qualification, same-tool benchmarks and quality.
+6. **Measurement tools** ([tools/](tools/README.md)): `bf_lab.py` records and compares a serve by full token IDs and
+   engine counters, and `bf_preflight.sh` reports a node's clocks, memory and rails.
 
 | 125K-context cell (same pair) | Python engine | Native + patches, 1 rail | Native + patches, 2 rails |
 |---|---:|---:|---:|

@@ -1,6 +1,6 @@
 #!/bin/bash
 # blackfold-native start|stop|status: DeepSeek-V4.1-Flash-1017 TP2 on TensorFold native
-# (629c524 + patches/0001-0003), rank 0 on the head (run this there), rank 1 on the worker.
+# (6366d2c + patches/0001-0003), rank 0 on the head (run this there), rank 1 on the worker.
 # Two RoCE rails when both nodes' twins align (blackfold-rail-align), otherwise one rail.
 # Configure with deploy/blackfold.env (see blackfold.env.example).
 set -euo pipefail
@@ -54,13 +54,19 @@ start() {
     /native/bin/tf-dsv41-lanes /model /cache/tf-ds-rank 1 2 $HEAD_ADDR 29620 /kit --engram /engram \
     --token-map /cache/dsv41_token_map.json --pool 1048576 --rdma $RDMA --graphs 1 --side 1 --prefetch 1 \
     --aio 1 --streams 4" >/dev/null
-  $base $(mounts $HEAD_BUILD $HEAD_KIT $HEAD_TEMPLATE) $common -e NCCL_IB_GID_INDEX=$g0 -e TF_RDMA_GID_INDEX=$g0 $IMAGE \
-    /native/native/bin/tensorfold-native serve /model --host 0.0.0.0 --port $PORT \
-    --name $SERVED_NAME --context 1048576 --parallel 4 --thinking --max-tokens 4096 \
+  # optional API key file (chmod 600; one key per line): every route but /health then needs the key
+  keymount="" keyarg=""
+  if [ -n "${API_KEY_FILE:-}" ]; then
+    keymount="-v $API_KEY_FILE:/run/blackfold-api-key:ro" keyarg="--api-key-file /run/blackfold-api-key"
+  fi
+  $base $(mounts $HEAD_BUILD $HEAD_KIT $HEAD_TEMPLATE) $keymount $common -e NCCL_IB_GID_INDEX=$g0 \
+    -e TF_RDMA_GID_INDEX=$g0 $IMAGE \
+    /native/native/bin/tensorfold-native serve /model --host 0.0.0.0 --port $PORT $keyarg \
+    --name $SERVED_NAME --context 1048576 --parallel 4 --thinking --max-tokens ${MAX_TOKENS:-32768} \
     --temperature 1 --top-p 0.95 --top-k 20 --backend cuda --no-update-check >/dev/null
   for i in $(seq 1 120); do
-    curl -s -m 3 "http://$HEAD_ADDR:$PORT/v1/models" | grep -q "$SERVED_NAME" && \
-      ! curl -s -m 3 "http://$HEAD_ADDR:$PORT/health" | grep -q '"warming": *true' && { status; exit 0; }
+    h=$(curl -s -m 3 "http://$HEAD_ADDR:$PORT/health" || true)
+    echo "$h" | grep -q "$SERVED_NAME" && ! echo "$h" | grep -q '"warming": *true' && { status; exit 0; }
     sleep 5
   done
   echo "native did not become ready in 10 min" >&2; exit 1
