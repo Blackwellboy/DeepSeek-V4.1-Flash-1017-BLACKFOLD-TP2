@@ -36,7 +36,7 @@ BLACKFOLD puts together other people's work. Our own part is listed at the end.
   the two-Spark recipe our first serve came from, its `bench/run-bench.sh` and its seeded MMLU/GSM8K evaluation with
   DeepSeek API reference answers. lucataco credits sudoingX's [dgx-spark-deepseek-v41](https://github.com/sudoingX/dgx-spark-deepseek-v41).
 - **tonyd2wild**: [DeepSeek-V4.1-Flash-vLLM-DGX-Spark](https://github.com/tonyd2wild/DeepSeek-V4.1-Flash-vLLM-DGX-Spark), the
-  TensorFold TP2 lane we compare against, `v41bench_tf.py`, and the published two-rail measurements and runtime-address
+  TensorFold TP2 lane I learned from, `v41bench_tf.py`, and the published two-rail measurements and runtime-address
   approach for the second RoCE twin.
 - **MiaAI-Lab**: [DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks),
   whose notes on using both PCIe twins of a port as rails (code by webzone) and on matched GPU clocks informed our setup.

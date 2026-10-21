@@ -2,9 +2,9 @@
 
 # BLACKFOLD: DeepSeek-V4.1-Flash-1017 TP2 recipe
 
-**Uncensored, and still faster than the stock builds.** DeepSeek-V4.1-Flash-1017 (763B MoE) on two DGX Sparks:
-**+52% faster 128K prefill** and **+6.6% faster code** than lucataco's stock TP2, level or ahead of tonyd2wild's
-at 1 to 4 streams, JailbreakBench refusals cut from 94 to 6, and no measurable quality loss against DeepSeek's own API.
+**Uncensored, fast, and checked.** DeepSeek-V4.1-Flash-1017 (763B MoE) on two DGX Sparks: JailbreakBench
+refusals cut from 94 to 6, the same answers as DeepSeek's own API, 2,008 tok/s cold prefill on a 128K prompt and
+113 tok/s single-stream code decode.
 
 This is the TP2 recipe: how to run BLACKFOLD on two GB10 nodes with TensorFold's native engine, the three engine
 patches that make it fast, the two-rail network setup, and every measurement. The weights live on Hugging Face:
@@ -63,20 +63,33 @@ OpenAI-compatible API on port 18191: 1M context, 4 parallel streams, vision, too
 
 ## Results
 
-Every comparison uses the other project's **own** tool, run against BLACKFOLD, next to that project's own
-published number for its stock (censored) build. Raw files and conditions: [results/](results/RESULTS.md).
+I built on lucataco's and tonyd2wild's TP2 work, so I benchmarked BLACKFOLD with their **own** tools and put it
+next to the numbers each of them published for their stock (censored) builds. Raw files and conditions:
+[results/](results/RESULTS.md).
 
-![vs lucataco](assets/vs-lucataco.png)
+![lucataco's kit_bench](assets/lucataco-kit-bench.png)
 
-![vs tonyd2wild](assets/vs-tonyd2wild.png)
+![tonyd2wild's v41bench_tf](assets/tonyd2wild-v41bench.png)
 
 ![Quality](assets/quality.png)
 
 ![Refusals](assets/refusals.png)
 
-Honest gaps: prose decode is level with lucataco's rather than ahead, and tonyd2wild's prefill is still 7 to 19%
-faster on his own tool. The decode-after-128K test has no repeat option and its first run is consistently slow:
-35.4, 76.7 and 93.1 tok/s over three runs, against lucataco's single 71.1.
+## Issues I hit along the way, and the fixes
+
+The TP2 builds I learned from pin TensorFold commits from before some upstream fixes, so I left a note on each repo.
+
+- **lucataco's pin (`8e0966e`)** predates the DSML tool-call fix (#20), so tool-call markup could end up in replies,
+  and the RDMA gather's proxy thread spins a core while idle (fixed in #27).
+- **tonyd2wild's pin (`3ff3b2a`)** predates the kept-prompt fixes: coming back to a conversation after another one
+  with the same system prompt reused 0 cached tokens. On `629c524` (#26) it reuses 98,304. The final save in
+  `v41bench_tf.py` also fails if the `--out` folder does not exist yet.
+- **TensorFold native at `629c524`** leaked raw DSML when the model called a tool the request did not offer.
+  Upstream fixed it in #25, and this recipe pins `6366d2c`, which includes it.
+- **Native ran about 3% more verification rounds** than the Python engine for the same answer. Patches `0002` and
+  `0003` fix it (below).
+- **Tool-only streamed replies** sent a couple of newlines before the call, which strict clients read as content.
+  Patch `0001` fixes it.
 
 ## What we built
 
