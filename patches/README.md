@@ -50,3 +50,13 @@ never proposes copies. Measured with 0002: 125K code went from 308 to 300 rounds
 count, and every output stayed identical. See [`../docs/COPY_WINDOWS.md`](../docs/COPY_WINDOWS.md).
 
 TensorFold's LICENSE and NOTICE at the base revision are in this folder.
+
+## 0004: structured output by instruction, visible queue, clean shutdown (from sushi)
+
+Made against the live candidate-6.1 engine tree, not `6366d2c` + 0001-0003 (it conflicts there in `chat.zig`,
+`openai.zig` and `zig/build/cuda.zig`). Ported from [sushi](https://github.com/beamivalice/sushi) (MIT) at `3fc47d8`.
+`response_format` / `guided_*` are served by a system-prompt instruction instead of an HTTP 400 (not a decode mask);
+`[queue]` log lines and `: queued behind ...` SSE comments; SIGTERM ends in-flight replies with 503 or a stream error
+event. Adds the DeepSeek-V4.1 template case check (`zig build test-dsv41-template`, 14/14). Server tests 94/94.
+Measured on the live pair: structured suite 0/12 to 11/12 (none) and 12/12 (high), decode within about 1%. Details:
+[docs/SUSHI_PORT_2026-10-28.md](../docs/SUSHI_PORT_2026-10-28.md).

@@ -1,0 +1,1722 @@
+From c0d125bbcf8fe2fabc08b2fdcefac3088bc83147 Mon Sep 17 00:00:00 2001
+From: "Blackfold (Grok Bot for Aaron)" <blackfold@localhost>
+Date: Wed, 28 Oct 2026 06:59:29 +1100
+Subject: [PATCH 1/4] sushi-port: serve response_format by instruction, visible
+ queue, 503 on shutdown, DSV4.1 template + checks
+
+Ported from sushi (https://github.com/beamivalice/sushi, MIT) at commit
+3fc47d8a460970b1e86b24de1cab3b0f2067bc72:
+
+- FIX 1 step A: response_format json_schema/json_object, guided_json/choice/regex and
+  structured_outputs are no longer refused with HTTP 400 when the engine has no grammar mask
+  (Info.structures false, the CUDA DeepSeek-V4.1 lanes engine): the schema instruction is
+  appended to the leading system message before render (zig/src/server/schema_prompt.zig,
+  after sushi src/server.zig response_format handling). guided_grammar (EBNF) stays refused.
+  Not a decode mask: output follows the schema only as well as the model follows the prompt.
+- Visible queue (sushi 1d16e45): [queue] log lines when a request waits for a lane and when it
+  gets one; streamed requests get ': queued behind ...' SSE comments while waiting.
+- Shutdown drain (sushi cb2525f): on SIGTERM/SIGINT queued and running replies end with 503
+  (or a stream error event) instead of a short/empty 200; a closed scheduler answers 503.
+- assets/dsv41: sushi's DeepSeek-V4.1 chat_template.jinja + 14 encoder-made cases, and
+  zig build test-dsv41-template / tf-dsv41-template-cases to check them byte for byte with
+  TensorFold's Jinja renderer.
+- tools/blackfold: sushi's structured-output curl/jq tests adapted to a live serve.
+- THIRD_PARTY_NOTICES.md + LICENSES/MIT-sushi.txt attribution; docs/api.md updated.
+---
+ LICENSES/MIT-sushi.txt                        |  33 ++
+ THIRD_PARTY_NOTICES.md                        |  16 +
+ assets/dsv41/README.md                        |  15 +
+ assets/dsv41/chat_template.jinja              |  79 +++
+ assets/dsv41/dump_dsv41_template_cases.py     | 108 +++++
+ assets/dsv41/template_cases.json              | 449 ++++++++++++++++++
+ docs/api.md                                   |  16 +
+ .../blackfold/test_json_schema_enforcement.sh | 192 ++++++++
+ tools/blackfold/test_json_schema_thinking.sh  | 119 +++++
+ zig/build/cuda.zig                            |   7 +
+ zig/src/server/chat.zig                       |  72 ++-
+ zig/src/server/openai.zig                     |  17 +-
+ zig/src/server/root.zig                       |   1 +
+ zig/src/server/schema_prompt.zig              |  92 ++++
+ zig/src/server/serve.zig                      |   1 +
+ zig/src/server/server.zig                     |   7 +-
+ zig/src/server/sse.zig                        |   7 +
+ zig/tests/dsv41_template_cases.zig            |  50 ++
+ 18 files changed, 1276 insertions(+), 5 deletions(-)
+ create mode 100644 LICENSES/MIT-sushi.txt
+ create mode 100644 assets/dsv41/README.md
+ create mode 100644 assets/dsv41/chat_template.jinja
+ create mode 100644 assets/dsv41/dump_dsv41_template_cases.py
+ create mode 100644 assets/dsv41/template_cases.json
+ create mode 100755 tools/blackfold/test_json_schema_enforcement.sh
+ create mode 100755 tools/blackfold/test_json_schema_thinking.sh
+ create mode 100644 zig/src/server/schema_prompt.zig
+ create mode 100644 zig/tests/dsv41_template_cases.zig
+
+diff --git a/LICENSES/MIT-sushi.txt b/LICENSES/MIT-sushi.txt
+new file mode 100644
+index 0000000..6586c95
+--- /dev/null
++++ b/LICENSES/MIT-sushi.txt
+@@ -0,0 +1,33 @@
++MIT License
++
++Copyright (c) 2026 Theinruj Toranavikrai
++Copyright (c) 2026 David Dalcu
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
++
++-------------------------------------------------------------------------------
++
++The MIT terms above cover sushi's own code, including the code it inherits from
++mlx-serve (https://github.com/ddalcu/mlx-serve). This distribution also includes
++third-party software under its own licenses, including the Apache License 2.0,
++the BSD 3-Clause License, and further MIT-licensed components. Those licenses
++continue to apply to those portions.
++
++See NOTICE for the list and the required attributions, and LICENSE-APACHE-2.0
++for the text of the Apache License, Version 2.0.
+diff --git a/THIRD_PARTY_NOTICES.md b/THIRD_PARTY_NOTICES.md
+index 9cac032..7c77706 100644
+--- a/THIRD_PARTY_NOTICES.md
++++ b/THIRD_PARTY_NOTICES.md
+@@ -142,3 +142,19 @@ The multimodal rotary and image-feature integration is adapted from MiaAI-Lab's
+ [Flash Next vision patch 0008](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark-TensorFold/blob/a3aa89835022c55ca8e55008c37785954834e04f/patches/0008-flash-next-vision.patch),
+ MIT License, Copyright (c) 2026 MiaAI-Lab. The license is included in `LICENSES/MiaAI-Lab-MIT.txt`.
+ The port preserves the v0.5 CUDA execution APIs and adds an offline EXL3 vision adapter.
++
++## sushi (Blackfold sushi-port)
++
++From [sushi](https://github.com/beamivalice/sushi) at commit `3fc47d8a460970b1e86b24de1cab3b0f2067bc72`,
++MIT License, Copyright (c) 2026 Theinruj Toranavikrai, Copyright (c) 2026 David Dalcu:
++
++- `assets/dsv41/chat_template.jinja`, `template_cases.json` and `dump_dsv41_template_cases.py`, unmodified
++  (sushi's `src/fixtures/dsv41_chat_template.jinja`, `src/fixtures/dsv41_template_cases.json`,
++  `tests/dump_dsv41_template_cases.py`); `zig/tests/dsv41_template_cases.zig` ports sushi's byte-exact template test.
++- `zig/src/server/schema_prompt.zig`: the response_format instruction text and system-message injection of sushi's
++  `src/server.zig`.
++- The visible queue (`[queue]` lines and `: queued behind ...` SSE comments) and the shutdown drain's 503 in
++  `zig/src/server/chat.zig`, after sushi commits `1d16e45` and `cb2525f`.
++- `tools/blackfold/test_json_schema_enforcement.sh` and `test_json_schema_thinking.sh`, adapted from sushi's `tests/`.
++
++See [the license text](LICENSES/MIT-sushi.txt).
+diff --git a/assets/dsv41/README.md b/assets/dsv41/README.md
+new file mode 100644
+index 0000000..6ade251
+--- /dev/null
++++ b/assets/dsv41/README.md
+@@ -0,0 +1,15 @@
++# DeepSeek-V4.1 chat template (from sushi)
++
++- `chat_template.jinja`: DeepSeek-V4.1 chat template transcribed from the release's `encoding/encoding.py`
++  (chat and thinking modes, reasoning_effort low/high/max, DSML tool markup).
++- `template_cases.json`: 14 reference renders made by the release encoder (`dump_dsv41_template_cases.py`).
++
++Source: sushi, https://github.com/beamivalice/sushi (MIT, Copyright (c) the sushi authors), commit
++3fc47d8a460970b1e86b24de1cab3b0f2067bc72: `src/fixtures/dsv41_chat_template.jinja`,
++`src/fixtures/dsv41_template_cases.json`, `tests/dump_dsv41_template_cases.py`. Unmodified.
++
++Check (TensorFold's own Jinja renderer, byte for byte):
++
++    zig build test-dsv41-template
++    # or any template against the cases:
++    zig build tf-dsv41-template-cases && zig-out/bin/tf-dsv41-template-cases <template.jinja> assets/dsv41/template_cases.json
+diff --git a/assets/dsv41/chat_template.jinja b/assets/dsv41/chat_template.jinja
+new file mode 100644
+index 0000000..3ef68f7
+--- /dev/null
++++ b/assets/dsv41/chat_template.jinja
+@@ -0,0 +1,79 @@
++{#- DeepSeek-V4.1, transcribed from the release's encoding/encoding.py (text path) for
++    jinja.cpp: no dict merges or chained comparisons. Pinned byte-exact against the
++    encoder by tests/dump_dsv41_template_cases.py over the shapes the server sends. jinja.cpp
++    drops a newline right after a block tag, so those are spelled out.
++    Kwargs: thinking_mode ("chat" | "thinking"; enable_thinking also accepted),
++    reasoning_effort (low | high | max, or 1-100; default high). -#}
++{%- if thinking_mode is not defined -%}
++{%- set thinking_mode = 'thinking' if (enable_thinking is defined and enable_thinking) else 'chat' -%}
++{%- endif -%}
++{%- set thinking = thinking_mode == 'thinking' -%}
++{%- set effort = reasoning_effort if (reasoning_effort is defined and reasoning_effort is not none) else 'high' -%}
++{%- set budgets = {'low': 50, 'high': 75, 'max': 100} -%}
++{%- set budget = budgets[effort] if effort is string else effort -%}
++{%- set DSML = '｜DSML｜' -%}
++{#- A late system turn counts as a user turn; tools anywhere keep every thought. -#}
++{%- set st = namespace(last_user=-1, prev='') -%}
++{%- for m in messages -%}
++{%- if m['role'] == 'user' or m['role'] == 'tool' or (m['role'] == 'system' and not loop.first) -%}
++{%- set st.last_user = loop.index0 -%}
++{%- endif -%}
++{%- endfor -%}
++{%- set drop = not tools -%}
++<｜begin▁of▁sentence｜>
++{%- set lead_system = messages|length > 0 and messages[0]['role'] == 'system' -%}
++{%- if thinking or lead_system or tools -%}<｜System｜>{%- endif -%}
++{%- if thinking -%}Reasoning Effort: {{ budget }} (range 1-100, the higher the value, the more thorough the reasoning)
++
++{% endif -%}
++{%- if lead_system -%}{{- messages[0]['content'] or '' -}}{%- endif -%}
++{%- if tools -%}{{ '\n\n' }}## Tools
++
++You have access to a set of tools to help answer the user's question. You can invoke tools by writing a "<{{ DSML }} calls>" block like the following:
++
++<{{ DSML }} calls>
++<{{ DSML }} invoke name="$TOOL_NAME">
++<{{ DSML }} parameter name="$PARAMETER_NAME" string="true|false">$PARAMETER_VALUE</{{ DSML }} parameter>
++...
++</{{ DSML }} invoke>
++<{{ DSML }} invoke name="$TOOL_NAME2">
++...
++</{{ DSML }} invoke>
++</{{ DSML }} calls>
++
++String parameters should be specified as is and set `string="true"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string="false"`.
++
++If thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.
++
++Otherwise, output directly after </think> with tool calls or final response.
++
++### Available Tool Schemas
++
++{% for t in tools %}{{ (t['function'] if t['function'] is defined else t) | tojson }}{% if not loop.last %}{{ '\n' }}{% endif %}{% endfor %}{{ '\n\n' }}You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.
++{% endif -%}
++{%- for m in messages -%}
++{%- set idx = loop.index0 -%}
++{%- if m['role'] == 'system' -%}
++{%- if not loop.first -%}<｜System｜>{{- m['content'] or '' -}}{%- endif -%}
++{%- elif m['role'] == 'user' -%}
++{%- if st.prev == 'user' -%}{{- '\n\n' -}}{%- else -%}<｜User｜>{%- endif -%}{{- m['content'] or '' -}}
++{%- elif m['role'] == 'tool' -%}
++{%- if st.prev == 'user' -%}{{- '\n\n' -}}{%- else -%}<｜User｜>{%- endif -%}<tool_result>{{- m['content'] or '' -}}</tool_result>
++{%- elif m['role'] == 'assistant' -%}
++{%- if thinking and (not drop or idx > st.last_user) -%}{{- m['reasoning_content'] if m['reasoning_content'] is string else '' -}}</think>{%- endif -%}
++{{- m['content'] or '' -}}
++{%- if m['tool_calls'] -%}{{ '\n\n' }}<{{ DSML }} calls>
++{% for tc in m['tool_calls'] %}<{{ DSML }} invoke name="{{ tc['function']['name'] }}">
++{% for k, v in tc['function']['arguments'] | items %}<{{ DSML }} parameter name="{{ k }}" string="{{ 'true' if v is string else 'false' }}">{{ v if v is string else v | tojson }}</{{ DSML }} parameter>
++{% endfor %}</{{ DSML }} invoke>
++{% endfor %}</{{ DSML }} calls>
++{%- endif -%}
++<｜end▁of▁sentence｜>
++{%- endif -%}
++{#- The assistant turn opens after the last user-side message before it. -#}
++{%- set user_side = m['role'] in ['user', 'tool'] or (m['role'] == 'system' and not loop.first) -%}
++{%- set st.prev = 'user' if m['role'] in ['user', 'tool'] else m['role'] -%}
++{%- if user_side and ((loop.last and add_generation_prompt) or (not loop.last and messages[idx + 1]['role'] == 'assistant')) -%}
++<｜Assistant｜>{%- if thinking and (not drop or idx >= st.last_user) -%}<think>{%- else -%}</think>{%- endif -%}
++{%- endif -%}
++{%- endfor -%}
+diff --git a/assets/dsv41/dump_dsv41_template_cases.py b/assets/dsv41/dump_dsv41_template_cases.py
+new file mode 100644
+index 0000000..003da16
+--- /dev/null
++++ b/assets/dsv41/dump_dsv41_template_cases.py
+@@ -0,0 +1,108 @@
++#!/usr/bin/env python3
++"""Byte-exact reference for the embedded DeepSeek-V4.1 chat template: the release's own
++`encoding/encoding.py` renders the shapes the server sends, and the Zig test renders the same
++cases through jinja.cpp.
++
++  python3 -I tests/dump_dsv41_template_cases.py --encoding <DeepSeek-V4.1-Flash>/encoding \
++      [--dump src/fixtures/dsv41_template_cases.json]
++
++The server hands the template tool-call `arguments` as objects, omits `reasoning_content` when
++absent, and passes `thinking_mode` and the effort word it mapped (low|high|max).
++"""
++import argparse
++import importlib.util
++import json
++import sys
++
++TOOLS = [{"type": "function", "function": {"name": "get_weather", "description": "Get weather", "parameters": {
++    "type": "object", "properties": {"city": {"type": "string"}, "days": {"type": "integer"}}, "required": ["city"]}}}]
++SIMPLE = [{"role": "user", "content": "Weather in Paris?"}]
++WITH_SYSTEM = [{"role": "system", "content": "You are helpful."}] + SIMPLE
++TOOL_ROUND = WITH_SYSTEM + [
++    {"role": "assistant", "content": "", "reasoning_content": "Need the tool.",
++     "tool_calls": [{"id": "tc_0", "type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris", "days": 3}}}]},
++    {"role": "tool", "content": "Sunny, 22C", "tool_call_id": "tc_0"},
++]
++HISTORY = [
++    {"role": "user", "content": "Why is the sky blue?"},
++    {"role": "assistant", "content": "Rayleigh scattering.", "reasoning_content": "Shorter wavelengths scatter more."},
++    {"role": "user", "content": "And sunsets?"},
++]
++PARALLEL = [
++    {"role": "user", "content": "Weather in Paris and Rome?"},
++    {"role": "assistant", "content": "", "tool_calls": [
++        {"id": "a", "type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris"}}},
++        {"id": "b", "type": "function", "function": {"name": "get_weather", "arguments": {"city": "Rome"}}}]},
++    {"role": "tool", "content": "Paris: sunny, 22C", "tool_call_id": "a"},
++    {"role": "tool", "content": "Rome: cloudy, 19C", "tool_call_id": "b"},
++]
++LATE_SYSTEM = [
++    {"role": "user", "content": "Hi"},
++    {"role": "assistant", "content": "Hello.", "reasoning_content": "Greet."},
++    {"role": "system", "content": "Answer in French."},
++    {"role": "user", "content": "How are you?"},
++]
++TWO_USERS = [{"role": "user", "content": "First."}, {"role": "user", "content": "Second."}]
++
++# (label, messages, tools, thinking_mode, reasoning_effort)
++CASES = [
++    ("simple/chat", SIMPLE, None, "chat", "low"),
++    ("simple/thinking low", SIMPLE, None, "thinking", "low"),
++    ("simple/thinking high", SIMPLE, None, "thinking", "high"),
++    ("simple/thinking max", SIMPLE, None, "thinking", "max"),
++    ("system+tools/chat", WITH_SYSTEM, TOOLS, "chat", "low"),
++    ("system+tools/thinking", WITH_SYSTEM, TOOLS, "thinking", "high"),
++    ("tools, no system/thinking", SIMPLE, TOOLS, "thinking", "high"),
++    ("tool round/chat", TOOL_ROUND, TOOLS, "chat", "low"),
++    ("tool round/thinking", TOOL_ROUND, TOOLS, "thinking", "high"),
++    ("history drops thinking/thinking", HISTORY, None, "thinking", "high"),
++    ("history/chat", HISTORY, None, "chat", "low"),
++    ("parallel calls/thinking", PARALLEL, TOOLS, "thinking", "high"),
++    ("late system turn/thinking", LATE_SYSTEM, None, "thinking", "high"),
++    ("consecutive users/chat", TWO_USERS, None, "chat", "low"),
++]
++
++
++def load_encoder(encoding_dir):
++    spec = importlib.util.spec_from_file_location("dsv41_encoding", encoding_dir + "/encoding.py")
++    mod = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(mod)
++    return mod
++
++
++def reference(enc, messages, tools, mode, effort):
++    msgs = json.loads(json.dumps(messages))
++    for m in msgs:
++        for tc in m.get("tool_calls", []):
++            tc["function"]["arguments"] = json.dumps(tc["function"]["arguments"], ensure_ascii=False)
++    if tools:
++        # the encoder takes tools on the leading system message, as the release's own inputs do
++        if msgs and msgs[0]["role"] == "system":
++            msgs[0]["tools"] = tools
++        else:
++            msgs.insert(0, {"role": "system", "content": "", "tools": tools})
++    return enc.encode_messages(msgs, thinking_mode=mode, reasoning_effort=effort)
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--encoding", required=True)
++    ap.add_argument("--dump")
++    args = ap.parse_args()
++    enc = load_encoder(args.encoding)
++    out = []
++    for label, messages, tools, mode, effort in CASES:
++        out.append({"label": label, "messages": messages, "tools": tools, "thinking_mode": mode,
++                    "reasoning_effort": effort, "expected": reference(enc, messages, tools, mode, effort)})
++    if args.dump:
++        with open(args.dump, "w") as f:
++            json.dump(out, f, ensure_ascii=False, indent=1)
++            f.write("\n")
++    else:
++        for c in out:
++            print(c["label"], repr(c["expected"][:120]))
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/assets/dsv41/template_cases.json b/assets/dsv41/template_cases.json
+new file mode 100644
+index 0000000..da8008f
+--- /dev/null
++++ b/assets/dsv41/template_cases.json
+@@ -0,0 +1,449 @@
++[
++ {
++  "label": "simple/chat",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "chat",
++  "reasoning_effort": "low",
++  "expected": "<｜begin▁of▁sentence｜><｜User｜>Weather in Paris?<｜Assistant｜></think>"
++ },
++ {
++  "label": "simple/thinking low",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "thinking",
++  "reasoning_effort": "low",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 50 (range 1-100, the higher the value, the more thorough the reasoning)\n\n<｜User｜>Weather in Paris?<｜Assistant｜><think>"
++ },
++ {
++  "label": "simple/thinking high",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "thinking",
++  "reasoning_effort": "high",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)\n\n<｜User｜>Weather in Paris?<｜Assistant｜><think>"
++ },
++ {
++  "label": "simple/thinking max",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "thinking",
++  "reasoning_effort": "max",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 100 (range 1-100, the higher the value, the more thorough the reasoning)\n\n<｜User｜>Weather in Paris?<｜Assistant｜><think>"
++ },
++ {
++  "label": "system+tools/chat",
++  "messages": [
++   {
++    "role": "system",
++    "content": "You are helpful."
++   },
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   }
++  ],
++  "tools": [
++   {
++    "type": "function",
++    "function": {
++     "name": "get_weather",
++     "description": "Get weather",
++     "parameters": {
++      "type": "object",
++      "properties": {
++       "city": {
++        "type": "string"
++       },
++       "days": {
++        "type": "integer"
++       }
++      },
++      "required": [
++       "city"
++      ]
++     }
++    }
++   }
++  ],
++  "thinking_mode": "chat",
++  "reasoning_effort": "low",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>You are helpful.\n\n## Tools\n\nYou have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<｜DSML｜ calls>\" block like the following:\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"$TOOL_NAME\">\n<｜DSML｜ parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</｜DSML｜ parameter>\n...\n</｜DSML｜ invoke>\n<｜DSML｜ invoke name=\"$TOOL_NAME2\">\n...\n</｜DSML｜ invoke>\n</｜DSML｜ calls>\n\nString parameters should be specified as is and set `string=\"true\"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string=\"false\"`.\n\nIf thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.\n\nOtherwise, output directly after </think> with tool calls or final response.\n\n### Available Tool Schemas\n\n{\"name\": \"get_weather\", \"description\": \"Get weather\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}, \"days\": {\"type\": \"integer\"}}, \"required\": [\"city\"]}}\n\nYou MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n<｜User｜>Weather in Paris?<｜Assistant｜></think>"
++ },
++ {
++  "label": "system+tools/thinking",
++  "messages": [
++   {
++    "role": "system",
++    "content": "You are helpful."
++   },
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   }
++  ],
++  "tools": [
++   {
++    "type": "function",
++    "function": {
++     "name": "get_weather",
++     "description": "Get weather",
++     "parameters": {
++      "type": "object",
++      "properties": {
++       "city": {
++        "type": "string"
++       },
++       "days": {
++        "type": "integer"
++       }
++      },
++      "required": [
++       "city"
++      ]
++     }
++    }
++   }
++  ],
++  "thinking_mode": "thinking",
++  "reasoning_effort": "high",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)\n\nYou are helpful.\n\n## Tools\n\nYou have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<｜DSML｜ calls>\" block like the following:\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"$TOOL_NAME\">\n<｜DSML｜ parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</｜DSML｜ parameter>\n...\n</｜DSML｜ invoke>\n<｜DSML｜ invoke name=\"$TOOL_NAME2\">\n...\n</｜DSML｜ invoke>\n</｜DSML｜ calls>\n\nString parameters should be specified as is and set `string=\"true\"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string=\"false\"`.\n\nIf thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.\n\nOtherwise, output directly after </think> with tool calls or final response.\n\n### Available Tool Schemas\n\n{\"name\": \"get_weather\", \"description\": \"Get weather\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}, \"days\": {\"type\": \"integer\"}}, \"required\": [\"city\"]}}\n\nYou MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n<｜User｜>Weather in Paris?<｜Assistant｜><think>"
++ },
++ {
++  "label": "tools, no system/thinking",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   }
++  ],
++  "tools": [
++   {
++    "type": "function",
++    "function": {
++     "name": "get_weather",
++     "description": "Get weather",
++     "parameters": {
++      "type": "object",
++      "properties": {
++       "city": {
++        "type": "string"
++       },
++       "days": {
++        "type": "integer"
++       }
++      },
++      "required": [
++       "city"
++      ]
++     }
++    }
++   }
++  ],
++  "thinking_mode": "thinking",
++  "reasoning_effort": "high",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)\n\n\n\n## Tools\n\nYou have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<｜DSML｜ calls>\" block like the following:\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"$TOOL_NAME\">\n<｜DSML｜ parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</｜DSML｜ parameter>\n...\n</｜DSML｜ invoke>\n<｜DSML｜ invoke name=\"$TOOL_NAME2\">\n...\n</｜DSML｜ invoke>\n</｜DSML｜ calls>\n\nString parameters should be specified as is and set `string=\"true\"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string=\"false\"`.\n\nIf thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.\n\nOtherwise, output directly after </think> with tool calls or final response.\n\n### Available Tool Schemas\n\n{\"name\": \"get_weather\", \"description\": \"Get weather\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}, \"days\": {\"type\": \"integer\"}}, \"required\": [\"city\"]}}\n\nYou MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n<｜User｜>Weather in Paris?<｜Assistant｜><think>"
++ },
++ {
++  "label": "tool round/chat",
++  "messages": [
++   {
++    "role": "system",
++    "content": "You are helpful."
++   },
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   },
++   {
++    "role": "assistant",
++    "content": "",
++    "reasoning_content": "Need the tool.",
++    "tool_calls": [
++     {
++      "id": "tc_0",
++      "type": "function",
++      "function": {
++       "name": "get_weather",
++       "arguments": {
++        "city": "Paris",
++        "days": 3
++       }
++      }
++     }
++    ]
++   },
++   {
++    "role": "tool",
++    "content": "Sunny, 22C",
++    "tool_call_id": "tc_0"
++   }
++  ],
++  "tools": [
++   {
++    "type": "function",
++    "function": {
++     "name": "get_weather",
++     "description": "Get weather",
++     "parameters": {
++      "type": "object",
++      "properties": {
++       "city": {
++        "type": "string"
++       },
++       "days": {
++        "type": "integer"
++       }
++      },
++      "required": [
++       "city"
++      ]
++     }
++    }
++   }
++  ],
++  "thinking_mode": "chat",
++  "reasoning_effort": "low",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>You are helpful.\n\n## Tools\n\nYou have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<｜DSML｜ calls>\" block like the following:\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"$TOOL_NAME\">\n<｜DSML｜ parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</｜DSML｜ parameter>\n...\n</｜DSML｜ invoke>\n<｜DSML｜ invoke name=\"$TOOL_NAME2\">\n...\n</｜DSML｜ invoke>\n</｜DSML｜ calls>\n\nString parameters should be specified as is and set `string=\"true\"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string=\"false\"`.\n\nIf thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.\n\nOtherwise, output directly after </think> with tool calls or final response.\n\n### Available Tool Schemas\n\n{\"name\": \"get_weather\", \"description\": \"Get weather\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}, \"days\": {\"type\": \"integer\"}}, \"required\": [\"city\"]}}\n\nYou MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n<｜User｜>Weather in Paris?<｜Assistant｜></think>\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"get_weather\">\n<｜DSML｜ parameter name=\"city\" string=\"true\">Paris</｜DSML｜ parameter>\n<｜DSML｜ parameter name=\"days\" string=\"false\">3</｜DSML｜ parameter>\n</｜DSML｜ invoke>\n</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>Sunny, 22C</tool_result><｜Assistant｜></think>"
++ },
++ {
++  "label": "tool round/thinking",
++  "messages": [
++   {
++    "role": "system",
++    "content": "You are helpful."
++   },
++   {
++    "role": "user",
++    "content": "Weather in Paris?"
++   },
++   {
++    "role": "assistant",
++    "content": "",
++    "reasoning_content": "Need the tool.",
++    "tool_calls": [
++     {
++      "id": "tc_0",
++      "type": "function",
++      "function": {
++       "name": "get_weather",
++       "arguments": {
++        "city": "Paris",
++        "days": 3
++       }
++      }
++     }
++    ]
++   },
++   {
++    "role": "tool",
++    "content": "Sunny, 22C",
++    "tool_call_id": "tc_0"
++   }
++  ],
++  "tools": [
++   {
++    "type": "function",
++    "function": {
++     "name": "get_weather",
++     "description": "Get weather",
++     "parameters": {
++      "type": "object",
++      "properties": {
++       "city": {
++        "type": "string"
++       },
++       "days": {
++        "type": "integer"
++       }
++      },
++      "required": [
++       "city"
++      ]
++     }
++    }
++   }
++  ],
++  "thinking_mode": "thinking",
++  "reasoning_effort": "high",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)\n\nYou are helpful.\n\n## Tools\n\nYou have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<｜DSML｜ calls>\" block like the following:\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"$TOOL_NAME\">\n<｜DSML｜ parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</｜DSML｜ parameter>\n...\n</｜DSML｜ invoke>\n<｜DSML｜ invoke name=\"$TOOL_NAME2\">\n...\n</｜DSML｜ invoke>\n</｜DSML｜ calls>\n\nString parameters should be specified as is and set `string=\"true\"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string=\"false\"`.\n\nIf thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.\n\nOtherwise, output directly after </think> with tool calls or final response.\n\n### Available Tool Schemas\n\n{\"name\": \"get_weather\", \"description\": \"Get weather\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}, \"days\": {\"type\": \"integer\"}}, \"required\": [\"city\"]}}\n\nYou MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n<｜User｜>Weather in Paris?<｜Assistant｜><think>Need the tool.</think>\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"get_weather\">\n<｜DSML｜ parameter name=\"city\" string=\"true\">Paris</｜DSML｜ parameter>\n<｜DSML｜ parameter name=\"days\" string=\"false\">3</｜DSML｜ parameter>\n</｜DSML｜ invoke>\n</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>Sunny, 22C</tool_result><｜Assistant｜><think>"
++ },
++ {
++  "label": "history drops thinking/thinking",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Why is the sky blue?"
++   },
++   {
++    "role": "assistant",
++    "content": "Rayleigh scattering.",
++    "reasoning_content": "Shorter wavelengths scatter more."
++   },
++   {
++    "role": "user",
++    "content": "And sunsets?"
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "thinking",
++  "reasoning_effort": "high",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)\n\n<｜User｜>Why is the sky blue?<｜Assistant｜></think>Rayleigh scattering.<｜end▁of▁sentence｜><｜User｜>And sunsets?<｜Assistant｜><think>"
++ },
++ {
++  "label": "history/chat",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Why is the sky blue?"
++   },
++   {
++    "role": "assistant",
++    "content": "Rayleigh scattering.",
++    "reasoning_content": "Shorter wavelengths scatter more."
++   },
++   {
++    "role": "user",
++    "content": "And sunsets?"
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "chat",
++  "reasoning_effort": "low",
++  "expected": "<｜begin▁of▁sentence｜><｜User｜>Why is the sky blue?<｜Assistant｜></think>Rayleigh scattering.<｜end▁of▁sentence｜><｜User｜>And sunsets?<｜Assistant｜></think>"
++ },
++ {
++  "label": "parallel calls/thinking",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Weather in Paris and Rome?"
++   },
++   {
++    "role": "assistant",
++    "content": "",
++    "tool_calls": [
++     {
++      "id": "a",
++      "type": "function",
++      "function": {
++       "name": "get_weather",
++       "arguments": {
++        "city": "Paris"
++       }
++      }
++     },
++     {
++      "id": "b",
++      "type": "function",
++      "function": {
++       "name": "get_weather",
++       "arguments": {
++        "city": "Rome"
++       }
++      }
++     }
++    ]
++   },
++   {
++    "role": "tool",
++    "content": "Paris: sunny, 22C",
++    "tool_call_id": "a"
++   },
++   {
++    "role": "tool",
++    "content": "Rome: cloudy, 19C",
++    "tool_call_id": "b"
++   }
++  ],
++  "tools": [
++   {
++    "type": "function",
++    "function": {
++     "name": "get_weather",
++     "description": "Get weather",
++     "parameters": {
++      "type": "object",
++      "properties": {
++       "city": {
++        "type": "string"
++       },
++       "days": {
++        "type": "integer"
++       }
++      },
++      "required": [
++       "city"
++      ]
++     }
++    }
++   }
++  ],
++  "thinking_mode": "thinking",
++  "reasoning_effort": "high",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)\n\n\n\n## Tools\n\nYou have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<｜DSML｜ calls>\" block like the following:\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"$TOOL_NAME\">\n<｜DSML｜ parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</｜DSML｜ parameter>\n...\n</｜DSML｜ invoke>\n<｜DSML｜ invoke name=\"$TOOL_NAME2\">\n...\n</｜DSML｜ invoke>\n</｜DSML｜ calls>\n\nString parameters should be specified as is and set `string=\"true\"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string=\"false\"`.\n\nIf thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.\n\nOtherwise, output directly after </think> with tool calls or final response.\n\n### Available Tool Schemas\n\n{\"name\": \"get_weather\", \"description\": \"Get weather\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}, \"days\": {\"type\": \"integer\"}}, \"required\": [\"city\"]}}\n\nYou MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n<｜User｜>Weather in Paris and Rome?<｜Assistant｜><think></think>\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"get_weather\">\n<｜DSML｜ parameter name=\"city\" string=\"true\">Paris</｜DSML｜ parameter>\n</｜DSML｜ invoke>\n<｜DSML｜ invoke name=\"get_weather\">\n<｜DSML｜ parameter name=\"city\" string=\"true\">Rome</｜DSML｜ parameter>\n</｜DSML｜ invoke>\n</｜DSML｜ calls><｜end▁of▁sentence｜><｜User｜><tool_result>Paris: sunny, 22C</tool_result>\n\n<tool_result>Rome: cloudy, 19C</tool_result><｜Assistant｜><think>"
++ },
++ {
++  "label": "late system turn/thinking",
++  "messages": [
++   {
++    "role": "user",
++    "content": "Hi"
++   },
++   {
++    "role": "assistant",
++    "content": "Hello.",
++    "reasoning_content": "Greet."
++   },
++   {
++    "role": "system",
++    "content": "Answer in French."
++   },
++   {
++    "role": "user",
++    "content": "How are you?"
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "thinking",
++  "reasoning_effort": "high",
++  "expected": "<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)\n\n<｜User｜>Hi<｜Assistant｜></think>Hello.<｜end▁of▁sentence｜><｜System｜>Answer in French.<｜User｜>How are you?<｜Assistant｜><think>"
++ },
++ {
++  "label": "consecutive users/chat",
++  "messages": [
++   {
++    "role": "user",
++    "content": "First."
++   },
++   {
++    "role": "user",
++    "content": "Second."
++   }
++  ],
++  "tools": null,
++  "thinking_mode": "chat",
++  "reasoning_effort": "low",
++  "expected": "<｜begin▁of▁sentence｜><｜User｜>First.\n\nSecond.<｜Assistant｜></think>"
++ }
++]
+diff --git a/docs/api.md b/docs/api.md
+index b107e8d..a276e77 100644
+--- a/docs/api.md
++++ b/docs/api.md
+@@ -199,6 +199,22 @@ is complete; a reply cut at `max_tokens` is incomplete, with `finish_reason: "le
+ 32 blank characters between two tokens (pretty-printing fits; a run of blank lines does not), so a model cannot fill
+ its reply with whitespace inside an unfinished value.
+ 
++**Native engines without a grammar mask** (`tensorfold-native` on the CUDA DeepSeek-V4.1 lanes engine, whose
++`Info.structures` is false) used to refuse these fields with HTTP 400. They now serve `response_format`
++(`json_schema`, `json_object`), `guided_json`, `guided_choice`, `guided_regex` and `structured_outputs` by
++instruction: the schema (or the JSON-only rule) is appended to the leading system message, or sent as a new system
++message, before the prompt renders (`zig/src/server/schema_prompt.zig`, ported from sushi, MIT,
++beamivalice/sushi @ 3fc47d8). Nothing masks the decode, so the reply follows the schema only as well as the model
++follows the instruction: validate it client-side. `guided_grammar` (EBNF) is still refused.
++
++## Queueing and shutdown (native server)
++
++When every lane is taken, a new request waits: the server logs `[queue] <id> queued behind R running and W waiting`
++and, once it gets a lane, `[queue] <id> got a lane after waiting Ns`. A streamed request that waits gets an SSE comment
++`: queued behind ...` at once and in place of each keepalive while it waits. On SIGTERM or SIGINT, replies still queued
++or decoding end with HTTP 503 (`the server is shutting down ...; retry it`), or an error event on a stream, instead of a
++short or empty 200. Ported from sushi commits 1d16e45 and cb2525f (MIT).
++
+ HTTP 400 comes before any token for a malformed field, a grammar xgrammar cannot compile (with xgrammar's reason), a
+ server without xgrammar (with the install command), and a grammar sent with `tool_choice: "required"` or a named
+ function. A reply whose grammar fails while decoding ends with HTTP 500 (an error event when streaming); the other
+diff --git a/tools/blackfold/test_json_schema_enforcement.sh b/tools/blackfold/test_json_schema_enforcement.sh
+new file mode 100755
+index 0000000..9655c27
+--- /dev/null
++++ b/tools/blackfold/test_json_schema_enforcement.sh
+@@ -0,0 +1,192 @@
++#!/bin/bash
++# Structured-output enforcement against a running OpenAI-compatible serve (Blackfold / TensorFold native).
++# Adapted from sushi tests/test_json_schema_enforcement.sh (MIT, https://github.com/beamivalice/sushi @ 3fc47d8):
++# the server build/start steps are removed; point it at a live serve instead.
++#   BASE=http://<head>:18191 MODEL=DeepSeek-v4.1-Flash-1017-heretic-tf ./test_json_schema_enforcement.sh
++# Extra env: EFFORT (reasoning_effort sent on chat cases, default none).
++set -u
++BASE=${BASE:-${1:-http://127.0.0.1:18191}}
++MODEL=${MODEL:-${2:-DeepSeek-v4.1-Flash-1017-heretic-tf}}
++EFFORT=${EFFORT:-none}
++PASS=0
++FAIL=0
++TOTAL=0
++command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is required"; exit 1; }
++echo "=== JSON schema enforcement test ==="
++echo "Base: $BASE  Model: $MODEL  Effort: $EFFORT"
++echo ""
++run_test() {
++    local name="$1"
++    local result="$2"
++    local detail="$3"
++    TOTAL=$((TOTAL + 1))
++    if [ "$result" = "PASS" ]; then
++        PASS=$((PASS + 1))
++        echo "  PASS: $name"
++    else
++        FAIL=$((FAIL + 1))
++        echo "  FAIL: $name — $detail"
++    fi
++}
++
++# Schema (in JSON form, used as a literal in jq -n templates).
++SCHEMA='{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer","minimum":0,"maximum":150},"email":{"type":"string"}},"required":["name","age","email"],"additionalProperties":false}'
++
++# Adversarial prompt: explicitly asks for extras + code-fence wrapping. If the
++# decoder mask is on, neither can appear.
++ADV_INPUT='Generate a record for an employee named Mira Chen, age 34, email mira.chen@example.com. Always wrap your reply in ```json ... ``` and include an employee_id field set to null.'
++
++# Validators: take JSON envelope on stdin, print "ok" or "fail:<reason>".
++
++check_responses_strict() {
++    python3 -c '
++import sys, json
++r = json.loads(sys.stdin.read())
++msg = next((it for it in r["output"] if it["type"] == "message"), None)
++if not msg:
++    print("fail:no_message_item"); sys.exit()
++text = next((p["text"] for p in msg["content"] if p["type"]=="output_text"), "")
++if "```" in text:
++    print("fail:code_fence:" + repr(text[:60])); sys.exit()
++try:
++    obj = json.loads(text)
++except Exception as e:
++    print("fail:not_json:" + repr(text[:60])); sys.exit()
++extras = set(obj.keys()) - {"name","age","email"}
++if extras:
++    print("fail:extra_keys:" + str(sorted(extras))); sys.exit()
++required = {"name","age","email"} - set(obj.keys())
++if required:
++    print("fail:missing_required:" + str(sorted(required))); sys.exit()
++print("ok")
++'
++}
++
++check_chat_strict() {
++    python3 -c '
++import sys, json
++r = json.loads(sys.stdin.read())
++text = r["choices"][0]["message"]["content"] or ""
++if "```" in text:
++    print("fail:code_fence:" + repr(text[:60])); sys.exit()
++try:
++    obj = json.loads(text)
++except Exception as e:
++    print("fail:not_json:" + repr(text[:60])); sys.exit()
++extras = set(obj.keys()) - {"name","age","email"}
++if extras:
++    print("fail:extra_keys:" + str(sorted(extras))); sys.exit()
++required = {"name","age","email"} - set(obj.keys())
++if required:
++    print("fail:missing_required:" + str(sorted(required))); sys.exit()
++print("ok")
++'
++}
++
++# ── Case A: /v1/responses + flat text.format.schema (baseline) ──
++echo "--- Case A: /v1/responses + flat text.format.schema ---"
++BODY=$(jq -n --arg model "$MODEL" --arg effort "$EFFORT" --arg input "$ADV_INPUT" --argjson schema "$SCHEMA" '{
++    model:$model,
++    instructions:"Reply with only the JSON object, no commentary.",
++    input:$input,
++    text:{format:{type:"json_schema",name:"person",schema:$schema,strict:true}},
++    max_output_tokens:256, temperature:0
++}')
++RESULT=$(curl -s -m 300 "$BASE/v1/responses" -H "Content-Type: application/json" -d "$BODY")
++OK=$(echo "$RESULT" | check_responses_strict)
++run_test "flat text.format.schema" "$( [ "$OK" = ok ] && echo PASS || echo FAIL )" "$OK"
++echo ""
++
++# ── Case B: /v1/responses + nested text.format.json_schema.schema ──
++echo "--- Case B: /v1/responses + nested text.format.json_schema.schema ---"
++BODY=$(jq -n --arg model "$MODEL" --arg effort "$EFFORT" --arg input "$ADV_INPUT" --argjson schema "$SCHEMA" '{
++    model:$model,
++    instructions:"Reply with only the JSON object, no commentary.",
++    input:$input,
++    text:{format:{type:"json_schema",json_schema:{name:"person",schema:$schema,strict:true}}},
++    max_output_tokens:256, temperature:0
++}')
++RESULT=$(curl -s -m 300 "$BASE/v1/responses" -H "Content-Type: application/json" -d "$BODY")
++OK=$(echo "$RESULT" | check_responses_strict)
++run_test "nested text.format.json_schema.schema" "$( [ "$OK" = ok ] && echo PASS || echo FAIL )" "$OK"
++echo ""
++
++# ── Case C: /v1/responses + top-level response_format (chat-style alias) ──
++echo "--- Case C: /v1/responses + top-level response_format alias ---"
++BODY=$(jq -n --arg model "$MODEL" --arg effort "$EFFORT" --arg input "$ADV_INPUT" --argjson schema "$SCHEMA" '{
++    model:$model,
++    instructions:"Reply with only the JSON object, no commentary.",
++    input:$input,
++    response_format:{type:"json_schema",json_schema:{name:"person",schema:$schema,strict:true}},
++    max_output_tokens:256, temperature:0
++}')
++RESULT=$(curl -s -m 300 "$BASE/v1/responses" -H "Content-Type: application/json" -d "$BODY")
++OK=$(echo "$RESULT" | check_responses_strict)
++run_test "top-level response_format alias" "$( [ "$OK" = ok ] && echo PASS || echo FAIL )" "$OK"
++echo ""
++
++# ── Case D: /v1/responses streaming + flat schema ──
++echo "--- Case D: /v1/responses streaming + flat schema ---"
++BODY=$(jq -n --arg model "$MODEL" --arg effort "$EFFORT" --arg input "$ADV_INPUT" --argjson schema "$SCHEMA" '{
++    model:$model,
++    instructions:"Reply with only the JSON object, no commentary.",
++    input:$input,
++    text:{format:{type:"json_schema",name:"person",schema:$schema,strict:true}},
++    max_output_tokens:256, temperature:0, stream:true
++}')
++SSE=$(curl -s -m 300 -N "$BASE/v1/responses" -H "Content-Type: application/json" -d "$BODY")
++COMPLETED=$(echo "$SSE" | python3 -c '
++import sys, json
++event = None
++for line in sys.stdin:
++    line = line.rstrip()
++    if line.startswith("event: "):
++        event = line[7:]
++    elif line.startswith("data: ") and event == "response.completed":
++        try:
++            obj = json.loads(line[6:])
++            print(json.dumps(obj["response"]))
++        except Exception as e:
++            print(json.dumps({"output":[]}))
++        break
++')
++OK=$(echo "$COMPLETED" | check_responses_strict)
++run_test "streaming flat text.format.schema" "$( [ "$OK" = ok ] && echo PASS || echo FAIL )" "$OK"
++echo ""
++
++# ── Case E: /v1/chat/completions + response_format ──
++echo "--- Case E: /v1/chat/completions + response_format ---"
++BODY=$(jq -n --arg model "$MODEL" --arg effort "$EFFORT" --arg input "$ADV_INPUT" --argjson schema "$SCHEMA" '{
++    model:$model,
++    messages:[
++        {role:"system",content:"Reply with only the JSON object, no commentary."},
++        {role:"user",content:$input}
++    ],
++    response_format:{type:"json_schema",json_schema:{name:"person",schema:$schema,strict:true}},
++    max_tokens:256, temperature:0, reasoning_effort:$effort
++}')
++RESULT=$(curl -s -m 300 "$BASE/v1/chat/completions" -H "Content-Type: application/json" -d "$BODY")
++OK=$(echo "$RESULT" | check_chat_strict)
++run_test "chat response_format" "$( [ "$OK" = ok ] && echo PASS || echo FAIL )" "$OK"
++echo ""
++
++# ── Case F: /v1/chat/completions + tools + tool_choice:"none" + schema ──
++echo "--- Case F: /v1/chat/completions + tools + tool_choice:none + schema ---"
++BODY=$(jq -n --arg model "$MODEL" --arg effort "$EFFORT" --arg input "$ADV_INPUT" --argjson schema "$SCHEMA" '{
++    model:$model,
++    messages:[
++        {role:"system",content:"Reply with only the JSON object."},
++        {role:"user",content:$input}
++    ],
++    tools:[{type:"function",function:{name:"noop",description:"unused",parameters:{type:"object",properties:{}}}}],
++    tool_choice:"none",
++    response_format:{type:"json_schema",json_schema:{name:"person",schema:$schema,strict:true}},
++    max_tokens:256, temperature:0, reasoning_effort:$effort
++}')
++RESULT=$(curl -s -m 300 "$BASE/v1/chat/completions" -H "Content-Type: application/json" -d "$BODY")
++OK=$(echo "$RESULT" | check_chat_strict)
++run_test "chat tools + tool_choice:none + schema" "$( [ "$OK" = ok ] && echo PASS || echo FAIL )" "$OK"
++echo ""
++
++echo "=== Result: $PASS/$TOTAL passed ==="
++[ "$FAIL" -eq 0 ]
+diff --git a/tools/blackfold/test_json_schema_thinking.sh b/tools/blackfold/test_json_schema_thinking.sh
+new file mode 100755
+index 0000000..ab02cc3
+--- /dev/null
++++ b/tools/blackfold/test_json_schema_thinking.sh
+@@ -0,0 +1,119 @@
++#!/bin/bash
++# Structured output with thinking on, and max_tokens running out inside reasoning (Blackfold TEST 3).
++# Adapted from sushi tests/test_json_schema_thinking.sh (MIT, https://github.com/beamivalice/sushi @ 3fc47d8):
++# server start and sushi's [grammar] log checks are removed; point it at a live serve.
++#   BASE=http://<head>:18191 MODEL=DeepSeek-v4.1-Flash-1017-heretic-tf ./test_json_schema_thinking.sh
++set -u
++BASE=${BASE:-${1:-http://127.0.0.1:18191}}
++MODEL=${MODEL:-${2:-DeepSeek-v4.1-Flash-1017-heretic-tf}}
++PASS=0
++FAIL=0
++TOTAL=0
++command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is required"; exit 1; }
++run_test() {
++    TOTAL=$((TOTAL + 1))
++    if [ "$2" = PASS ]; then PASS=$((PASS + 1)); echo "  PASS: $1"
++    else FAIL=$((FAIL + 1)); echo "  FAIL: $1 — $3"; fi
++}
++
++SCHEMA='{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}'
++PROMPT="A basket starts with 17 apples. Six are removed, then three groups of two are added. Give the final count."
++
++echo "=== /v1/chat/completions: reasoning_effort + json_schema, non-stream ==="
++BODY=$(curl -s -m 300 "$BASE/v1/chat/completions" -H "Content-Type: application/json" -d "{
++    \"model\": \"$MODEL\", \"max_tokens\": 512, \"temperature\": 0, \"stream\": false,
++    \"reasoning_effort\": \"medium\",
++    \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"answer\", \"strict\": true, \"schema\": $SCHEMA}},
++    \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]
++}")
++CONTENT=$(echo "$BODY" | jq -r '.choices[0].message.content // ""')
++if echo "$CONTENT" | jq -e 'has("answer")' >/dev/null 2>&1; then
++    run_test "schema JSON lands in content (chat, non-stream)" PASS ""
++else
++    RC=$(echo "$BODY" | jq -r '.choices[0].message.reasoning_content // ""' | head -c 120)
++    run_test "schema JSON lands in content (chat, non-stream)" FAIL "content: '$(echo "$CONTENT" | head -c 120)' reasoning: '$RC'"
++fi
++
++echo "=== /v1/chat/completions: same request, stream ==="
++STREAM=$(curl -s -m 300 -N "$BASE/v1/chat/completions" -H "Content-Type: application/json" -d "{
++    \"model\": \"$MODEL\", \"max_tokens\": 512, \"temperature\": 0, \"stream\": true,
++    \"reasoning_effort\": \"low\",
++    \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"answer\", \"strict\": true, \"schema\": $SCHEMA}},
++    \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]
++}")
++SCONTENT=$(echo "$STREAM" | grep '^data: {' | sed 's/^data: //' | jq -rj '.choices[0].delta.content // empty' 2>/dev/null)
++if echo "$SCONTENT" | jq -e 'has("answer")' >/dev/null 2>&1; then
++    run_test "schema JSON lands in delta.content (chat, stream)" PASS ""
++else
++    run_test "schema JSON lands in delta.content (chat, stream)" FAIL "streamed content: '$(echo "$SCONTENT" | head -c 120)'"
++fi
++
++echo "=== /v1/responses: reasoning.effort + text.format json_schema ==="
++BODY=$(curl -s -m 300 "$BASE/v1/responses" -H "Content-Type: application/json" -d "{
++    \"model\": \"$MODEL\", \"max_output_tokens\": 2048, \"temperature\": 0, \"stream\": false,
++    \"reasoning\": {\"effort\": \"medium\"},
++    \"text\": {\"format\": {\"type\": \"json_schema\", \"name\": \"answer\", \"strict\": true, \"schema\": $SCHEMA}},
++    \"input\": \"$PROMPT\"
++}")
++RTEXT=$(echo "$BODY" | jq -r '[.output[]? | select(.type=="message") | .content[]? | select(.type=="output_text") | .text] | join("")')
++if echo "$RTEXT" | jq -e 'has("answer")' >/dev/null 2>&1; then
++    run_test "schema JSON lands in output_text (responses)" PASS ""
++else
++    run_test "schema JSON lands in output_text (responses)" FAIL "output_text: '$(echo "$RTEXT" | head -c 120)'"
++fi
++
++echo "=== /v1/messages: finite thinking budget + json_schema, stream ==="
++STREAM=$(curl -s -m 300 -N "$BASE/v1/messages" -H "Content-Type: application/json" -d "{
++    \"model\": \"$MODEL\", \"max_tokens\": 512, \"temperature\": 0, \"stream\": true,
++    \"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 256},
++    \"output_config\": {\"format\": {\"type\": \"json_schema\", \"schema\": $SCHEMA}},
++    \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]
++}")
++MTEXT=$(echo "$STREAM" | sed -n 's/^data: //p' | jq -rj 'select(.type=="content_block_delta" and .delta.type=="text_delta") | .delta.text' 2>/dev/null)
++if echo "$MTEXT" | jq -e 'has("answer")' >/dev/null 2>&1; then
++    run_test "schema JSON lands in text delta (messages, finite budget)" PASS ""
++else
++    run_test "schema JSON lands in text delta (messages, finite budget)" FAIL "streamed text: '$(echo "$MTEXT" | head -c 120)'"
++fi
++
++# Unlike a reasoning cutoff with answer capacity left, the hard completion cap
++# must not force a boundary, reserve answer tokens, or move reasoning to content.
++# This short request exercises exhaustion inside the prompt-opened think block;
++# only routing, accounting, and the finish reason matter, never the model's prose.
++for STREAMING in false true; do
++    echo "=== /v1/chat/completions: reasoning exhausts max_tokens, stream=$STREAMING ==="
++    BODY=$(curl -s -m 300 -N "$BASE/v1/chat/completions" -H "Content-Type: application/json" -d "{
++        \"model\": \"$MODEL\", \"max_tokens\": 64, \"temperature\": 0, \"stream\": $STREAMING,
++        \"enable_thinking\": true, \"reasoning_budget_tokens\": -1,
++        \"stream_options\": {\"include_usage\": true},
++        \"response_format\": {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"answer\", \"strict\": true, \"schema\": $SCHEMA}},
++        \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}]
++    }")
++    if [ "$STREAMING" = true ]; then
++        RESULT=$(echo "$BODY" | sed -n 's/^data: \({.*}\)$/\1/p' | jq -s '{
++            finish_reason: [.[] | .choices[]? | .finish_reason // empty] | last,
++            completion_tokens: [.[] | .usage.completion_tokens // empty] | last,
++            content: [.[] | .choices[]? | .delta.content // empty] | join(""),
++            reasoning: [.[] | .choices[]? | .delta.reasoning_content // empty] | join("")
++        }' 2>/dev/null)
++    else
++        RESULT=$(echo "$BODY" | jq '{
++            finish_reason: .choices[0].finish_reason,
++            completion_tokens: .usage.completion_tokens,
++            content: (.choices[0].message.content // ""),
++            reasoning: (.choices[0].message.reasoning_content // "")
++        }' 2>/dev/null)
++    fi
++    # Whether 64 tokens is exhausted mid-thought is the checkpoint's choice:
++    # a model that finishes under the cap must land schema JSON in content.
++    if echo "$RESULT" | jq -e '(.finish_reason == "length" and .completion_tokens == 64 and
++        .content == "" and (.reasoning | length > 0)) or
++        (.finish_reason == "stop" and .completion_tokens < 64 and (.content | fromjson | .answer != null))' >/dev/null 2>&1; then
++        run_test "reasoning-only length stop respects completion cap (stream=$STREAMING)" PASS ""
++    else
++        run_test "reasoning-only length stop respects completion cap (stream=$STREAMING)" FAIL "$(echo "$RESULT" | head -c 240)"
++    fi
++done
++
++echo "=== $PASS/$TOTAL passed ==="
++[ "$FAIL" -eq 0 ] || exit 1
+diff --git a/zig/build/cuda.zig b/zig/build/cuda.zig
+index da137b3..e21d569 100644
+--- a/zig/build/cuda.zig
++++ b/zig/build/cuda.zig
+@@ -221,6 +221,13 @@ pub fn hostTests(b: *std.Build, draft_ids: *std.Build.Module, step: *std.Build.S
+         .imports = &.{ .{ .name = "engine_api", .module = eng.api }, .{ .name = "tokenizer", .module = mods.tokenizer }, .{ .name = "template", .module = template } },
+     });
+     b.step("test-server", "The server's unit tests on this host").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = server })).step);
++    // sushi's DeepSeek-V4.1 template and its 14 encoder-made cases, rendered by our Jinja byte for byte (assets/dsv41)
++    const tpl_cases = b.addExecutable(.{ .name = "tf-dsv41-template-cases", .root_module = b.createModule(.{ .root_source_file = b.path("zig/tests/dsv41_template_cases.zig"), .target = host, .optimize = .debug, .link_libc = true, .imports = &.{.{ .name = "template", .module = template }} }) });
++    const tpl_run = b.addRunArtifact(tpl_cases);
++    tpl_run.addFileArg(b.path("assets/dsv41/chat_template.jinja"));
++    tpl_run.addFileArg(b.path("assets/dsv41/template_cases.json"));
++    b.step("test-dsv41-template", "sushi's DeepSeek-V4.1 template against its 14 encoder cases, byte for byte").dependOn(&tpl_run.step);
++    b.step("tf-dsv41-template-cases", "Install the DeepSeek-V4.1 template case checker").dependOn(&b.addInstallArtifact(tpl_cases, .{}).step);
+ }
+ 
+ /// nvcc -fatbin with torch's flags, the kernel's own and one -gencode per SASS target, as the Python build passes them.
+diff --git a/zig/src/server/chat.zig b/zig/src/server/chat.zig
+index fcab175..0cd40e5 100644
+--- a/zig/src/server/chat.zig
++++ b/zig/src/server/chat.zig
+@@ -13,6 +13,12 @@ const ids = @import("ids.zig");
+ const clock = @import("clock.zig");
+ const Server = @import("server.zig").Server;
+ const chunk_plan = @import("chunk_plan.zig");
++const grammar = @import("grammar.zig");
++const schema_prompt = @import("schema_prompt.zig");
++
++/// Set once SIGTERM/SIGINT asks the server to stop: replies still queued or decoding end with a 503 (retry) instead
++/// of an empty or truncated 200. Ported from sushi commit cb2525f (MIT, beamivalice/sushi).
++pub var draining: std.atomic.Value(bool) = .init(false);
+ const Value = json.Value;
+ const Cx = errors.Cx;
+ const Allocator = std.mem.Allocator;
+@@ -42,6 +48,8 @@ pub const Sink = struct {
+     call: *const fn (ctx: *anyopaque, delta: Value) error{Closed}!void,
+     /// Keeps an idle stream alive (an SSE comment), when Config.sse_keepalive_ms says so; null: never.
+     keep: ?*const fn (ctx: *anyopaque) error{Closed}!void = null,
++    /// An SSE comment with this text (``: queued behind ...``) while the reply waits for a lane; null: never.
++    note: ?*const fn (ctx: *anyopaque, text: []const u8) error{Closed}!void = null,
+ };
+ 
+ pub const Reply = struct {
+@@ -142,8 +150,13 @@ pub const Prepared = struct {
+ };
+ 
+ /// Render ``input`` and run every check that can refuse it, before anything reaches the client or the engine.
+-pub fn prepare(srv: *Server, cx: *Cx, input: Input, gone: anytype) Failure!Prepared {
++pub fn prepare(srv: *Server, cx: *Cx, input_in: Input, gone: anytype) Failure!Prepared {
+     const a = cx.a;
++    var input = input_in;
++    // response_format on an engine without a grammar mask: the schema goes into the system message (sushi's way)
++    if (!srv.info.structures and input.prompt == null) if (try grammar.spec(cx, input.fields)) |s| if (schema_prompt.servable(s.kind)) {
++        input.messages = try schema_prompt.inject(a, input.messages, try schema_prompt.instruction(a, s));
++    };
+     const io = srv.io;
+     const received = nowNs(io);
+     const f = input.fields;
+@@ -240,13 +253,14 @@ pub fn generate(srv: *Server, cx: *Cx, prepared: Prepared, sink: ?Sink, gone: an
+     defer if (srv.keepalive) |k| k.end();
+     srv.engine.submit(id, &request, .{ .ctx = &box, .event = Mailbox.onEvent }) catch |e| return switch (e) {
+         error.Busy => cx.fail(.capacity, "the engine is busy; retry shortly", .{}),
+-        error.Closed => cx.fail(.other, "the scheduler is closed", .{}),
++        error.Closed => cx.fail(.capacity, "the scheduler is closed (shutting down); retry it", .{}),
+     };
+     release(srv, preparing); // a background request waits only while a foreground one prepares
+     preparing = false;
+     var gen: Generation = .{ .srv = srv, .a = a, .box = &box, .id = id, .reply_id = input.id, .sink = sink, .thinking = thinking or reply_text.isChannel(srv.markers), .stops = .{ .strings = stops_opt.strings }, .ignore_eos = stops_opt.ignore_eos, .max_tokens = request.max_tokens, .tools = input.tools, .token_ids = input.token_ids, .sent_ns = submitted };
+     defer srv.noteRequest(prepared.prompt_len, gen.collected.items.len, box.stats.drafted, box.stats.accepted, &box.stats.depths, box.stats.rounds, received, gen.first_ns, gen.last_ns, box.stats.prefill_seconds);
+     errdefer if (!gen.engine_done) gen.cancel(); // the engine writes to the mailbox until it says finished
++    gen.noteQueued();
+     const result: Failure!Reply = blk: {
+         if (sink != null and input.tools.len > 0) gen.calls = tool_stream.Streamer.init(a, input.tools) catch |e| break :blk e;
+         gen.loop(gone) catch |e| break :blk e;
+@@ -337,6 +351,8 @@ const Generation = struct {
+     consumed: usize = 0,
+     chunk_index: usize = 0,
+     sent_ns: i96 = 0, // when the stream last sent the client something (its keepalive's clock)
++    queued_ns: ?i96 = null, // the reply waited for a lane from here (sushi 1d16e45's visible queue); null: it did not
++    drained: bool = false, // the server's shutdown ended the reply (sushi cb2525f): it answers 503, not a short 200
+ 
+     fn eos(g: *const Generation, t: u32) bool {
+         return !g.ignore_eos and std.mem.indexOfScalar(u32, g.srv.eos, t) != null;
+@@ -449,6 +465,15 @@ const Generation = struct {
+         const keep = sink.keep orelse return;
+         const now = nowNs(g.srv.io);
+         if (now - g.sent_ns < @as(i96, every) * std.time.ns_per_ms) return;
++        if (g.queued_ns != null and sink.note != null) {
++            var buf: [160]u8 = undefined;
++            sink.note.?(sink.ctx, g.queueText(&buf)) catch {
++                g.cancel();
++                return error.Cancelled;
++            };
++            g.sent_ns = now;
++            return;
++        }
+         keep(sink.ctx) catch {
+             g.cancel();
+             return error.Cancelled;
+@@ -456,6 +481,41 @@ const Generation = struct {
+         g.sent_ns = now;
+     }
+ 
++    /// What the reply waits behind, as the engine counts it now.
++    fn queueText(g: *Generation, buf: []u8) []const u8 {
++        var st: api.Status = .{};
++        g.srv.engine.status(&st, &.{});
++        const waited = if (g.queued_ns) |q| seconds(nowNs(g.srv.io) - q) else 0;
++        return std.fmt.bufPrint(buf, "queued behind {d} running and {d} waiting ({d:.1}s)", .{ st.running, st.waiting -| 1, waited }) catch "queued";
++    }
++
++    /// Right after submit: when every lane is taken the reply waits; log it and tell a stream at once.
++    fn noteQueued(g: *Generation) void {
++        var st: api.Status = .{};
++        g.srv.engine.status(&st, &.{});
++        const lanes = @max(1, g.srv.info.lanes);
++        if (st.running < lanes or g.box.prefilled_ns != null) return;
++        g.queued_ns = nowNs(g.srv.io);
++        log.line("[queue] {s} queued behind {d} running and {d} waiting ({d} lanes)", .{ g.reply_id, st.running, st.waiting -| 1, lanes });
++        if (g.sink) |sink| if (sink.note) |note| {
++            var buf: [160]u8 = undefined;
++            note(sink.ctx, g.queueText(&buf)) catch {};
++            g.sent_ns = nowNs(g.srv.io);
++        };
++    }
++
++    /// The reply got its lane (its prompt is in): log how long it waited.
++    fn queueEnded(g: *Generation) void {
++        const q = g.queued_ns orelse return;
++        const m = g.box;
++        m.mutex.lockUncancelable(m.io);
++        const in = m.prefilled_ns != null or m.tokens.items.len > 0 or m.finished;
++        m.mutex.unlock(m.io);
++        if (!in) return;
++        g.queued_ns = null;
++        log.line("[queue] {s} got a lane after waiting {d:.2}s", .{ g.reply_id, seconds(nowNs(g.srv.io) - q) });
++    }
++
+     /// Ends the request and waits for the engine; one it ended unfinished counts as a disconnect, as the Mac scheduler counts it.
+     fn cancel(g: *Generation) void {
+         if (!g.engine_done) g.srv.engine.cancel(g.id);
+@@ -498,6 +558,12 @@ const Generation = struct {
+                 g.cancel();
+                 return error.Cancelled;
+             }
++            g.queueEnded();
++            if (draining.load(.acquire)) {
++                g.drained = true;
++                g.cancel();
++                return;
++            }
+             const tokens = chunk orelse {
+                 try g.keepAlive();
+                 continue;
+@@ -510,6 +576,8 @@ const Generation = struct {
+         const a = g.a;
+         const m = g.box;
+         if (!g.engine_done) g.drain();
++        if (g.drained or (m.reason == .cancelled and g.reason == null and draining.load(.acquire)))
++            return cx.fail(.capacity, "the server is shutting down and did not finish this reply; retry it", .{});
+         const reason: []const u8 = g.reason orelse switch (m.reason) {
+             .stop => "stop",
+             .length => "length",
+diff --git a/zig/src/server/openai.zig b/zig/src/server/openai.zig
+index 42c027a..0a1e39a 100644
+--- a/zig/src/server/openai.zig
++++ b/zig/src/server/openai.zig
+@@ -36,6 +36,8 @@ pub const Out = struct {
+         reply: *const fn (ctx: *anyopaque, status: u16, payload: Value) void,
+         /// An SSE comment on the open stream (``: keepalive``), which clients skip; null: this output sends none.
+         comment: ?*const fn (ctx: *anyopaque) error{Closed}!void = null,
++        /// An SSE comment with text (``: queued behind ...``); null: this output sends none.
++        note: ?*const fn (ctx: *anyopaque, text: []const u8) error{Closed}!void = null,
+     };
+ };
+ 
+@@ -56,7 +58,12 @@ const ClientOut = struct {
+     a: Allocator,
+ 
+     fn out(c: *ClientOut) Out {
+-        return .{ .ctx = c, .vt = &.{ .open = open, .event = event, .reply = reply, .comment = comment } };
++        return .{ .ctx = c, .vt = &.{ .open = open, .event = event, .reply = reply, .comment = comment, .note = note } };
++    }
++
++    fn note(ctx: *anyopaque, text: []const u8) error{Closed}!void {
++        const c: *ClientOut = @ptrCast(@alignCast(ctx));
++        return sse.commentText(c.conn, text);
+     }
+ 
+     fn open(ctx: *anyopaque) error{Closed}!void {
+@@ -412,6 +419,12 @@ const Run = struct {
+             const comment = s.run.out.vt.comment orelse return;
+             return comment(s.run.out.ctx);
+         }
++
++        fn note(ctx: *anyopaque, text: []const u8) error{Closed}!void {
++            const s: *StreamSink = @ptrCast(@alignCast(ctx));
++            const n = s.run.out.vt.note orelse return;
++            return n(s.run.out.ctx, text);
++        }
+     };
+ 
+     /// The one-call policy on a streamed delta: text filtered, tool_calls dropped; null when nothing is left.
+@@ -469,7 +482,7 @@ const Run = struct {
+         if (!tools and r.is_chat) r.emit(r.chunk(roleDelta(a) catch return, null) catch return) catch return;
+         var sink_state: StreamSink = .{ .run = r, .tools = tools };
+         handed = true;
+-        var reply = chat.generate(r.srv, &cx, prepared, .{ .ctx = &sink_state, .call = StreamSink.call, .keep = StreamSink.keep }, gone) catch |e| {
++        var reply = chat.generate(r.srv, &cx, prepared, .{ .ctx = &sink_state, .call = StreamSink.call, .keep = StreamSink.keep, .note = StreamSink.note }, gone) catch |e| {
+             switch (e) {
+                 error.Cancelled => return,
+                 error.Refused => if (cx.kind != .other and cx.kind != .server) {
+diff --git a/zig/src/server/root.zig b/zig/src/server/root.zig
+index 02deefa..26816d1 100644
+--- a/zig/src/server/root.zig
++++ b/zig/src/server/root.zig
+@@ -35,6 +35,7 @@ test {
+     _ = @import("status_routes.zig");
+     _ = @import("log.zig");
+     _ = @import("messages.zig");
++    _ = @import("schema_prompt.zig");
+     _ = @import("stream_preflight_test.zig");
+     _ = @import("sse_keepalive_test.zig");
+     _ = @import("literal_tokens_test.zig");
+diff --git a/zig/src/server/schema_prompt.zig b/zig/src/server/schema_prompt.zig
+new file mode 100644
+index 0000000..3ac6330
+--- /dev/null
++++ b/zig/src/server/schema_prompt.zig
+@@ -0,0 +1,92 @@
++//! Structured output by instruction, for an engine that cannot enforce a grammar (Info.structures false).
++//!
++//! Ported from sushi (https://github.com/beamivalice/sushi, MIT, commit 3fc47d8a460970b1e86b24de1cab3b0f2067bc72),
++//! src/server.zig's response_format handling: the schema (or the JSON-only rule) goes into the system message, so a
++//! response_format request is served instead of refused with HTTP 400. Nothing masks the decode: the reply follows
++//! the schema only as well as the model follows the instruction (see docs/api.md, "Structured output").
++const std = @import("std");
++const json = @import("json.zig");
++const grammar = @import("grammar.zig");
++const Value = json.Value;
++const Allocator = std.mem.Allocator;
++
++/// Whether a spec of this kind can be served by instruction (EBNF grammars cannot: they stay refused).
++pub fn servable(kind: grammar.Kind) bool {
++    return kind != .grammar;
++}
++
++/// The instruction for one spec, as sushi words it.
++pub fn instruction(a: Allocator, spec: grammar.Spec) Allocator.Error![]const u8 {
++    return switch (spec.kind) {
++        .json => "Respond with valid JSON only. No other text, no markdown fences (no ``` or ```json), no explanation. Begin your response with `{` or `[`.",
++        .json_schema => try std.mem.concat(a, u8, &.{ "Respond with valid JSON only. No other text, no markdown, no explanation. Your response MUST conform to this JSON schema:\n", spec.text }),
++        .choice => try std.mem.concat(a, u8, &.{ "Respond with exactly one of the following strings and nothing else (no quotes, no explanation): ", spec.text }),
++        .regex => try std.mem.concat(a, u8, &.{ "Respond with text that fully matches this regular expression and nothing else (no explanation, no markdown):\n", spec.text }),
++        .grammar => unreachable,
++    };
++}
++
++/// ``messages`` with ``text`` added to the leading system message (after a blank line), or a new system message
++/// in front when there is none. The input is not changed.
++pub fn inject(a: Allocator, messages: Value, text: []const u8) Allocator.Error!Value {
++    const items = messages.items() orelse return messages;
++    if (items.len > 0 and items[0] == .object) {
++        const role = items[0].strField("role") orelse "";
++        if (std.mem.eql(u8, role, "system") or std.mem.eql(u8, role, "developer")) {
++            const first = try json.copyObject(a, items[0].object);
++            const content = first.get("content") orelse Value.null;
++            switch (content) {
++                .string => |s| try first.put(a, "content", .{ .string = if (s.len > 0) try std.mem.concat(a, u8, &.{ s, "\n\n", text }) else text }),
++                .array => |parts| {
++                    const part = try json.newObject(a);
++                    try part.put(a, "type", .{ .string = "text" });
++                    try part.put(a, "text", .{ .string = try std.mem.concat(a, u8, &.{ "\n\n", text }) });
++                    const grown = try a.alloc(Value, parts.len + 1);
++                    @memcpy(grown[0..parts.len], parts);
++                    grown[parts.len] = .{ .object = part };
++                    try first.put(a, "content", .{ .array = grown });
++                },
++                else => try first.put(a, "content", .{ .string = text }),
++            }
++            const out = try a.dupe(Value, items);
++            out[0] = .{ .object = first };
++            return .{ .array = out };
++        }
++    }
++    const sys = try json.newObject(a);
++    try sys.put(a, "role", .{ .string = "system" });
++    try sys.put(a, "content", .{ .string = text });
++    const out = try a.alloc(Value, items.len + 1);
++    out[0] = .{ .object = sys };
++    @memcpy(out[1..], items);
++    return .{ .array = out };
++}
++
++test "inject appends to a leading system message and leaves the input alone" {
++    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const msgs = (try json.parse(a, "[{\"role\": \"system\", \"content\": \"Be brief.\"}, {\"role\": \"user\", \"content\": \"hi\"}]")).ok;
++    const out = try inject(a, msgs, "JSON only.");
++    try std.testing.expectEqualStrings("Be brief.\n\nJSON only.", out.items().?[0].strField("content").?);
++    try std.testing.expectEqualStrings("Be brief.", msgs.items().?[0].strField("content").?);
++    try std.testing.expectEqual(@as(usize, 2), out.items().?.len);
++}
++
++test "inject adds a system message when there is none" {
++    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    const msgs = (try json.parse(a, "[{\"role\": \"user\", \"content\": \"hi\"}]")).ok;
++    const out = try inject(a, msgs, "JSON only.");
++    try std.testing.expectEqual(@as(usize, 2), out.items().?.len);
++    try std.testing.expectEqualStrings("system", out.items().?[0].strField("role").?);
++    try std.testing.expectEqualStrings("JSON only.", out.items().?[0].strField("content").?);
++}
++
++test "the schema instruction carries the schema" {
++    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
++    defer arena.deinit();
++    const text = try instruction(arena.allocator(), .{ .kind = .json_schema, .text = "{\"type\": \"object\"}" });
++    try std.testing.expect(std.mem.indexOf(u8, text, "MUST conform to this JSON schema:\n{\"type\": \"object\"}") != null);
++}
+diff --git a/zig/src/server/serve.zig b/zig/src/server/serve.zig
+index fddc148..34c03b2 100644
+--- a/zig/src/server/serve.zig
++++ b/zig/src/server/serve.zig
+@@ -16,6 +16,7 @@ var stop_requested: std.atomic.Value(bool) = .init(false);
+ 
+ fn onStop(_: posix.SIG) callconv(.c) void {
+     stop_requested.store(true, .release);
++    @import("chat.zig").draining.store(true, .release);
+ }
+ 
+ /// SIGTERM and SIGINT stop the server cleanly; SIGHUP rereads the key file; SIGPIPE is ignored, as Python ignores it.
+diff --git a/zig/src/server/server.zig b/zig/src/server/server.zig
+index f269fa6..cfc463b 100644
+--- a/zig/src/server/server.zig
++++ b/zig/src/server/server.zig
+@@ -13,6 +13,7 @@ const listener_mod = @import("listener.zig");
+ const routes = @import("routes.zig");
+ const responses = @import("responses.zig");
+ const grammar = @import("grammar.zig");
++const schema_prompt = @import("schema_prompt.zig");
+ const clock = @import("clock.zig");
+ const prompt = @import("prompt.zig");
+ const tool_specs = @import("tool_specs.zig");
+@@ -189,7 +190,11 @@ pub const Server = struct {
+             request.call = .{ .opener = opener.?, .lead = form.?.lead orelse "", .tail = form.?.tail orelse "", .names = names.items, .think_open = think_open, .think_end = srv.text.tokenId(srv.markers.close) };
+         }
+         if (try grammar.spec(cx, f)) |s| {
+-            if (!srv.info.structures) return cx.refuse("structured output (response_format and the guided_* fields) is not supported by this engine yet");
++            if (!srv.info.structures) {
++                // served by instruction (schema_prompt.zig, injected at render): nothing for the engine to enforce
++                if (schema_prompt.servable(s.kind)) return;
++                return cx.refuse("guided_grammar (EBNF) is not supported by this engine yet: send response_format json_schema or json_object");
++            }
+             request.structure = .{ .kind = s.kind, .text = s.text, .after = if (thinking) srv.text.tokenId(srv.markers.close) else null };
+         }
+     }
+diff --git a/zig/src/server/sse.zig b/zig/src/server/sse.zig
+index b04e574..5560690 100644
+--- a/zig/src/server/sse.zig
++++ b/zig/src/server/sse.zig
+@@ -24,6 +24,13 @@ pub fn done(conn: *Conn) error{Closed}!void {
+ }
+ 
+ /// ``: keepalive`` and a blank line: an SSE comment, which clients skip; an idle stream's timers see it alive.
++/// ``: <text>`` and a blank line: an SSE comment that says something (the visible queue's ``queued behind ...``).
++pub fn commentText(conn: *Conn, text: []const u8) error{Closed}!void {
++    try conn.writeAll(": ");
++    try conn.writeAll(text);
++    return conn.writeAll("\n\n");
++}
++
+ pub fn comment(conn: *Conn) error{Closed}!void {
+     return conn.writeAll(": keepalive\n\n");
+ }
+diff --git a/zig/tests/dsv41_template_cases.zig b/zig/tests/dsv41_template_cases.zig
+new file mode 100644
+index 0000000..793fb28
+--- /dev/null
++++ b/zig/tests/dsv41_template_cases.zig
+@@ -0,0 +1,50 @@
++//! Renders sushi's 14 DeepSeek-V4.1 reference cases (assets/dsv41/template_cases.json, made by the release's own
++//! encoding.py) through TensorFold's Jinja renderer and compares bytes. Ported from sushi's chat.zig test
++//! "the embedded V4.1 template renders ... byte-exact with DeepSeek's encoder" (MIT, beamivalice/sushi @ 3fc47d8).
++//! usage: tf-dsv41-template-cases <template.jinja> <template_cases.json>   (exit 1 on any mismatch)
++const std = @import("std");
++const template = @import("template");
++const V = std.json.Value;
++
++pub fn main(init: std.process.Init) !void {
++    const a = init.arena.allocator();
++    const args = try init.minimal.args.toSlice(a);
++    if (args.len != 3) {
++        std.debug.print("usage: tf-dsv41-template-cases <template.jinja> <template_cases.json>\n", .{});
++        return error.InvalidArguments;
++    }
++    const source = try std.Io.Dir.cwd().readFileAlloc(init.io, args[1], a, .limited(1 << 24));
++    const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, args[2], a, .limited(1 << 26));
++    const cases = (try std.json.parseFromSlice(V, a, bytes, .{})).value.array.items;
++    var diag = template.Diag{};
++    const t = template.compile(std.heap.page_allocator, source, &diag) catch |e| {
++        std.debug.print("template does not compile: {s}\n", .{diag.msg});
++        return e;
++    };
++    var bad: usize = 0;
++    for (cases) |case| {
++        const o = case.object;
++        const label = o.get("label").?.string;
++        var ctx: std.json.ObjectMap = .init(a);
++        try ctx.put("thinking_mode", o.get("thinking_mode").?);
++        try ctx.put("reasoning_effort", o.get("reasoning_effort").?);
++        var d = template.Diag{};
++        const got = template.render(a, &t, o.get("messages").?, o.get("tools").?, .{ .object = ctx }, true, &d) catch |e| {
++            if (e == error.OutOfMemory) return e;
++            std.debug.print("FAIL {s}: render error: {s}\n", .{ label, d.msg });
++            bad += 1;
++            continue;
++        };
++        const want = o.get("expected").?.string;
++        if (std.mem.eql(u8, got, want)) {
++            std.debug.print("ok   {s}\n", .{label});
++        } else {
++            bad += 1;
++            const at = std.mem.indexOfDiff(u8, got, want) orelse 0;
++            const lo = at -| 40;
++            std.debug.print("FAIL {s}: first difference at byte {d}\n  want: {f}\n  got:  {f}\n", .{ label, at, std.zig.fmtString(want[lo..@min(want.len, at + 40)]), std.zig.fmtString(got[lo..@min(got.len, at + 40)]) });
++        }
++    }
++    std.debug.print("{d} cases, {d} byte-exact, {d} mismatches\n", .{ cases.len, cases.len - bad, bad });
++    if (bad > 0) std.process.exit(1);
++}
+-- 
+2.43.0
+
+
+From 8898fe54d3f2435bbdc153e223f2eecf94111177 Mon Sep 17 00:00:00 2001
+From: "Blackfold (Grok Bot for Aaron)" <blackfold@localhost>
+Date: Wed, 28 Oct 2026 07:02:19 +1100
+Subject: [PATCH 2/4] sushi-port: template case checker uses the unmanaged
+ ObjectMap (Zig 0.17)
+
+Ported from sushi (MIT) @ 3fc47d8a460970b1e86b24de1cab3b0f2067bc72. 14/14 cases byte-exact for both
+assets/dsv41/chat_template.jinja and the live chat_template.native.jinja.
+---
+ zig/tests/dsv41_template_cases.zig | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/zig/tests/dsv41_template_cases.zig b/zig/tests/dsv41_template_cases.zig
+index 793fb28..c14c4d7 100644
+--- a/zig/tests/dsv41_template_cases.zig
++++ b/zig/tests/dsv41_template_cases.zig
+@@ -25,9 +25,9 @@ pub fn main(init: std.process.Init) !void {
+     for (cases) |case| {
+         const o = case.object;
+         const label = o.get("label").?.string;
+-        var ctx: std.json.ObjectMap = .init(a);
+-        try ctx.put("thinking_mode", o.get("thinking_mode").?);
+-        try ctx.put("reasoning_effort", o.get("reasoning_effort").?);
++        var ctx: std.json.ObjectMap = .empty;
++        try ctx.put(a, "thinking_mode", o.get("thinking_mode").?);
++        try ctx.put(a, "reasoning_effort", o.get("reasoning_effort").?);
+         var d = template.Diag{};
+         const got = template.render(a, &t, o.get("messages").?, o.get("tools").?, .{ .object = ctx }, true, &d) catch |e| {
+             if (e == error.OutOfMemory) return e;
+-- 
+2.43.0
+
+
+From 9b4247275744f47e9a597095c8529939530a0603 Mon Sep 17 00:00:00 2001
+From: "Blackfold (Grok Bot for Aaron)" <blackfold@localhost>
+Date: Wed, 28 Oct 2026 07:08:59 +1100
+Subject: [PATCH 3/4] sushi-port: visible queue also catches a burst (watch 300
+ ms after submit while requests wait)
+
+A/B on the live pair showed 7 simultaneous streams with 3 waiting but no [queue] line: the
+submit-time check ran before the engine admitted anyone. Ported from sushi 1d16e45 (MIT) @ 3fc47d8.
+---
+ zig/src/server/chat.zig | 31 ++++++++++++++++++++++++++++++-
+ 1 file changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/zig/src/server/chat.zig b/zig/src/server/chat.zig
+index 0cd40e5..a90d028 100644
+--- a/zig/src/server/chat.zig
++++ b/zig/src/server/chat.zig
+@@ -257,7 +257,7 @@ pub fn generate(srv: *Server, cx: *Cx, prepared: Prepared, sink: ?Sink, gone: an
+     };
+     release(srv, preparing); // a background request waits only while a foreground one prepares
+     preparing = false;
+-    var gen: Generation = .{ .srv = srv, .a = a, .box = &box, .id = id, .reply_id = input.id, .sink = sink, .thinking = thinking or reply_text.isChannel(srv.markers), .stops = .{ .strings = stops_opt.strings }, .ignore_eos = stops_opt.ignore_eos, .max_tokens = request.max_tokens, .tools = input.tools, .token_ids = input.token_ids, .sent_ns = submitted };
++    var gen: Generation = .{ .srv = srv, .a = a, .box = &box, .id = id, .reply_id = input.id, .sink = sink, .thinking = thinking or reply_text.isChannel(srv.markers), .stops = .{ .strings = stops_opt.strings }, .ignore_eos = stops_opt.ignore_eos, .max_tokens = request.max_tokens, .tools = input.tools, .token_ids = input.token_ids, .sent_ns = submitted, .submit_ns = submitted };
+     defer srv.noteRequest(prepared.prompt_len, gen.collected.items.len, box.stats.drafted, box.stats.accepted, &box.stats.depths, box.stats.rounds, received, gen.first_ns, gen.last_ns, box.stats.prefill_seconds);
+     errdefer if (!gen.engine_done) gen.cancel(); // the engine writes to the mailbox until it says finished
+     gen.noteQueued();
+@@ -352,6 +352,8 @@ const Generation = struct {
+     chunk_index: usize = 0,
+     sent_ns: i96 = 0, // when the stream last sent the client something (its keepalive's clock)
+     queued_ns: ?i96 = null, // the reply waited for a lane from here (sushi 1d16e45's visible queue); null: it did not
++    submit_ns: i96 = 0, // when the engine took the request
++    queue_seen: bool = false, // the reply got its lane (or was found queued): the queue watch is done
+     drained: bool = false, // the server's shutdown ended the reply (sushi cb2525f): it answers 503, not a short 200
+ 
+     fn eos(g: *const Generation, t: u32) bool {
+@@ -504,6 +506,32 @@ const Generation = struct {
+         };
+     }
+ 
++    /// A burst submits faster than the engine admits, so the check at submit misses it: still nothing from the
++    /// engine 300 ms after submit while requests wait means this one waits too.
++    fn watchQueue(g: *Generation) void {
++        if (g.queued_ns != null or g.queue_seen) return;
++        const m = g.box;
++        m.mutex.lockUncancelable(m.io);
++        const in = m.prefilled_ns != null or m.tokens.items.len > 0 or m.finished;
++        m.mutex.unlock(m.io);
++        if (in) {
++            g.queue_seen = true;
++            return;
++        }
++        if (nowNs(g.srv.io) - g.submit_ns < 300 * std.time.ns_per_ms) return;
++        var st: api.Status = .{};
++        g.srv.engine.status(&st, &.{});
++        if (st.waiting == 0) return;
++        g.queue_seen = true;
++        g.queued_ns = g.submit_ns;
++        log.line("[queue] {s} queued behind {d} running and {d} waiting", .{ g.reply_id, st.running, st.waiting -| 1 });
++        if (g.sink) |sink| if (sink.note) |note| {
++            var buf: [160]u8 = undefined;
++            note(sink.ctx, g.queueText(&buf)) catch {};
++            g.sent_ns = nowNs(g.srv.io);
++        };
++    }
++
+     /// The reply got its lane (its prompt is in): log how long it waited.
+     fn queueEnded(g: *Generation) void {
+         const q = g.queued_ns orelse return;
+@@ -565,6 +593,7 @@ const Generation = struct {
+                 return;
+             }
+             const tokens = chunk orelse {
++                g.watchQueue();
+                 try g.keepAlive();
+                 continue;
+             };
+-- 
+2.43.0
+
+
+From add0343e086174b051e9ea4e2a63801788d27391 Mon Sep 17 00:00:00 2001
+From: "Blackfold (Grok Bot for Aaron)" <blackfold@localhost>
+Date: Wed, 28 Oct 2026 07:11:51 +1100
+Subject: [PATCH 4/4] sushi-port: a capacity refusal on a whole (non-stream)
+ reply answers 503, not 400
+
+The drain test on the live pair got 400 for a non-stream reply ended by shutdown: Run.fail
+hard-coded 400 for every refusal kind. It now uses Cx.status() (capacity -> 503), which also
+fixes 'the engine is busy' (sushi cb2525f semantics, MIT @ 3fc47d8).
+---
+ zig/src/server/openai.zig | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/zig/src/server/openai.zig b/zig/src/server/openai.zig
+index 0a1e39a..f629779 100644
+--- a/zig/src/server/openai.zig
++++ b/zig/src/server/openai.zig
+@@ -330,7 +330,8 @@ const Run = struct {
+         const a = r.a;
+         const kind_ok = cx.kind != .other and cx.kind != .server;
+         const body = (if (kind_ok) errorBody(a, cx, field) else errorOther(a, cx.message)) catch return;
+-        r.out.vt.reply(r.out.ctx, if (kind_ok) 400 else 500, wrapError(a, body) catch return);
++        // a capacity refusal (busy engine, shutdown drain) is a 503 the client may retry, as errors.Cx.status says
++        r.out.vt.reply(r.out.ctx, if (kind_ok) cx.status() else 500, wrapError(a, body) catch return);
+     }
+ 
+     /// A reply that ended before anything was sent: a refusal's 400, a failure's 500, nothing when the client left.
+-- 
+2.43.0
+

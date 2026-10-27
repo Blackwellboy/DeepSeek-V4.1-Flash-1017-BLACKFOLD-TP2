@@ -66,6 +66,9 @@ OpenAI-compatible API on port 18191: 1M context, 4 parallel streams, vision, too
 (send `chat_template_kwargs: {"enable_thinking": false}` to turn it off per request).
 
 **Before you use it:**
+- Structured output (`response_format`, `guided_json`): with patch 0004 it is served by a system-prompt instruction,
+  not a decode mask, so validate the JSON yourself; without it the engine answers HTTP 400. See
+  [docs/SUSHI_PORT_2026-10-28.md](docs/SUSHI_PORT_2026-10-28.md).
 - Set `max_tokens` on requests. Thinking counts against it; the deploy default is now 32,768.
 - Keep one thinking setting per conversation, so the prompt cache can reuse earlier turns.
 - Leave `top_k` unset or send 1-50: on this engine pin, `top_k` 0 or -1 fails the decode round for every request

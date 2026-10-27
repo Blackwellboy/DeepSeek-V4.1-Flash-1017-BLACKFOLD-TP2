@@ -44,6 +44,11 @@ BLACKFOLD puts together other people's work. Our own part is listed at the end.
 - [HarmBench](https://github.com/centerforaisafety/HarmBench), [StrongREJECT](https://github.com/dsbowen/strong_reject) and
   JailbreakBench behaviours: the refusal evaluations reported on the NIGHTFALL card.
 
+- **beamivalice / sushi**: [sushi](https://github.com/beamivalice/sushi) (MIT, Theinruj Toranavikrai and David Dalcu),
+  pinned at `3fc47d8`: the DeepSeek-V4.1 chat template and its 14 encoder cases (`templates/dsv41`), the
+  response_format instruction, visible queue and shutdown-503 behaviour in patch 0004, and the structured-output
+  tests in `tools/test_json_schema_*.sh`.
+
 ## Blackwellboy
 
 - Re-encoded pqhaz's edited `wo_b` weights into EXL3 and built the NIGHTFALL patch and assembly scripts.
